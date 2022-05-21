@@ -1,0 +1,76 @@
+<html>
+<body>
+<div id="mydiv"></div>
+<video id="video" autoplay muted playsinline></video>
+<script>
+let width = 480 / 2;
+let height = 640 / 2;
+let interval = 200;
+let mydiv = document.getElementById('mydiv');
+let video = document.getElementById('video');
+video.width = width;
+video.height = height;
+let canvas = document.createElement('canvas');
+canvas.width = width;
+canvas.height= height;
+let context = canvas.getContext('2d');
+
+let media_constrain = {
+    video: true,
+    //video: {facingMode: {exact: "environment"}},
+    audio: false,
+};
+if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+    navigator.mediaDevices.getUserMedia(media_constrain).then(function(stream) {
+        video.srcObject = stream;
+        video.play();
+    })
+    .catch(function(error) {
+        alert("1: " + error.name + ": " + error.message);
+    });
+} else if(navigator.getUserMedia) {
+    navigator.getUserMedia(media_constrain, function(stream) {
+        video.src = stream;
+        video.play();
+    }, errBack)
+    .catch(function(error) {
+        alert("2: " + error.name + ": " + error.message);
+    });
+} else if(navigator.webkitGetUserMedia) {
+    navigator.webkitGetUserMedia(media_constrain, function(stream){
+        video.src = window.webkitURL.createObjectURL(stream);
+        video.play();
+    }, errBack)
+    .catch(function(error) {
+        alert("3: " + error.name + ": " + error.message);
+    });
+} else if(navigator.mozGetUserMedia) {
+    navigator.mozGetUserMedia(media_constrain, function(stream){
+        video.srcObject = stream;
+        video.play();
+    }, errBack)
+    .catch(function(error) {
+        alert("4: " + error.name + ": " + error.message);
+    });
+} else {
+    alert('not supported api');
+}
+
+let frame_id = 0;
+function send_image_base64_data() {
+    context.drawImage(video, 0, 0, width, height);
+    let data_url = canvas.toDataURL('image/png');
+    let block = data_url.split(";");
+    //let content_type = block[0].split(":")[1];
+    let base64_data = block[1].split(",")[1];
+    let xmlhttp = new XMLHttpRequest();
+    xmlhttp.open('post', '/data');
+    xmlhttp.send(base64_data);
+    mydiv.textContent = frame_id;
+    ++frame_id;
+}
+
+window.setInterval(send_image_base64_data, interval);
+</script>
+</body>
+</html>

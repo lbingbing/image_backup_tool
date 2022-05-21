@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+.hflex {
+    display: flex;
+}
+.vflex {
+    display: flex;
+    flex-direction: column;
+}
+.flexauto {
+    flex: 0 0 auto;
+}
+</style>
+</head>
+<body id="body">
+<div id="control_div"></div>
+<div id="data_div"></div>
+<script>
+class App {
+    constructor() {
+        this.row_num = null;
+        this.col_num = null;
+        this.pixel_size = null;
+        this.part_num = null;
+        this.interval = null;
+        let this_tmp = this;
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.responseType = 'json';
+        xmlhttp.onload = function() {
+            this_tmp.row_num = this.response.row_num;
+            this_tmp.col_num = this.response.col_num;
+            this_tmp.pixel_size = this.response.pixel_size;
+            this_tmp.part_num = this.response.part_num;
+            this_tmp.interval = this.response.interval;
+            this_tmp.auto_display = this.response.auto_display;
+            this_tmp.init();
+        };
+        xmlhttp.open('get', '/init');
+        xmlhttp.send();
+    }
+
+    init() {
+        this.cur_part_id = 0;
+        this.loading_part = false;
+        this.auto_displaying = false;
+        if (this.auto_display) {
+            this.toggle_auto_display();
+        }
+
+        this.data_div = document.getElementById('data_div');
+        this.data_div.classList.add('vflex');
+        this.data_div.style.position = 'absolute';
+        this.data_div.style.top = 0;
+        this.data_div.style.bottom  = 0;
+        this.data_div.style.left = 0;
+        this.data_div.style.right = 0;
+        this.data_div.style.margin = 'auto';
+        this.data_div.style.border = this.pixel_size + 'px solid #000';
+        this.data_div.style.width = this.col_num * this.pixel_size + 'px';
+        this.data_div.style.height = this.row_num * this.pixel_size + 'px';
+        this.element_divs = [];
+        for (let i = 0; i < this.row_num; ++i) {
+            let row_div = document.createElement('div');
+            row_div.classList.add('flexauto', 'hflex');
+            let row_divs = [];
+            for (let j = 0; j < this.col_num; ++j) {
+                let element_div = document.createElement('div');
+                element_div.classList.add('flexauto');
+                element_div.style.width = this.pixel_size + 'px';
+                element_div.style.height = this.pixel_size + 'px';
+                row_div.appendChild(element_div);
+                row_divs.push(element_div);
+            }
+            this.data_div.appendChild(row_div);
+            this.element_divs.push(row_divs);
+        }
+
+        this.control_div = document.getElementById('control_div');
+        this.control_div.classList.add('hflex');
+        this.control_div.style.position = 'absolute';
+        this.control_div.style.top = 0;
+        this.control_div.style.left = 0;
+        this.control_div.style.right = 0;
+        this.control_div.style.margin = 'auto';
+        this.control_div.style.width = '160px';
+        this.control_div_style_display = this.control_div.style.display;
+
+        this.input = document.createElement('input');
+        this.input.classList.add('flexauto');
+        this.input.style.width = '80px';
+        this.control_div.appendChild(this.input);
+
+        let span = document.createElement('span');
+        span.classList.add('flexauto');
+        span.textContent = '/' + (this.part_num - 1);
+        this.control_div.appendChild(span);
+
+        this.navigate_part(this.cur_part_id);
+
+        let this_tmp = this;
+
+        let body = document.getElementById('body');
+        body.onkeydown = function(e) {
+            if (!this_tmp.loading_part) {
+                if (e.code == 'KeyF') {
+                    this_tmp.toggle_control_div();
+                } else if (e.code == 'Space') {
+                    this_tmp.toggle_auto_display();
+                } else if (e.code == 'ArrowLeft') {
+                    this_tmp.navigate_part(this_tmp.prev_part_id(this_tmp.cur_part_id));
+                } else if (e.code == 'ArrowRight') {
+                    this_tmp.navigate_part(this_tmp.next_part_id(this_tmp.cur_part_id));
+                }
+            }
+        }
+
+        this.show_control_div = true;
+        this.toggle_control_div();
+
+        this.input.onchange = function() {
+            if (!this_tmp.loading_part) {
+                this_tmp.navigate_part(Math.min(Math.max(Number(this.value), 0), this_tmp.part_num - 1));
+            }
+        };
+    }
+
+    next_part_id(part_id) {
+        return part_id == this.part_num - 1 ? 0 : part_id + 1;
+    }
+
+    prev_part_id(part_id) {
+        return part_id == 0 ? this.part_num - 1 : part_id - 1;
+    }
+
+    navigate_part(part_id, cb=null) {
+        let this_tmp = this;
+        var xmlhttp = new XMLHttpRequest();
+        xmlhttp.responseType = 'json';
+        xmlhttp.onload = function() {
+            this_tmp.cur_part_id = part_id;
+            this_tmp.loading_part = false;
+            this_tmp.show_data(this.response);
+            this_tmp.update_input();
+            if (cb) {
+                cb();
+            }
+        };
+        xmlhttp.open('get', '/data?part_id=' + part_id);
+        xmlhttp.send();
+        this.loading_part = true;
+    }
+
+    show_data(data) {
+        for (let i = 0; i < this.row_num; ++i) {
+            for (let j = 0; j < this.col_num; ++j) {
+                this.element_divs[i][j].style.backgroundColor = data[i][j] ? '#000' : '#fff';
+            }
+        }
+    }
+
+    toggle_auto_display() {
+        if (this.auto_displaying) {
+            this.stop_auto_display();
+        } else {
+            this.start_auto_display();
+        }
+    }
+
+    start_auto_display() {
+        let this_tmp = this;
+        this.timeoutId = window.setTimeout(function() {
+            this_tmp.navigate_part(this_tmp.next_part_id(this_tmp.cur_part_id), function() {
+                this_tmp.start_auto_display();
+            });
+        }, this.interval);
+        this.auto_displaying = true;
+    }
+
+    stop_auto_display() {
+        window.clearTimeout(this.timeoutId);
+        this.auto_displaying = false;
+    }
+
+    toggle_control_div() {
+        this.show_control_div = !this.show_control_div;
+        if (this.show_control_div) {
+            this.control_div.style.display = this.control_div_style_display;
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        } else {
+            this.control_div.style.display = 'none';
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            }
+        }
+    }
+
+    update_input() {
+        this.input.value = this.cur_part_id;
+    }
+}
+
+let app = new App();
+</script>
+</body>
+</html>
