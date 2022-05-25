@@ -159,6 +159,27 @@ Widget::Widget(QWidget* parent, const std::string& output_file, const Dim& dim, 
     connect(m_save_image_button, &QPushButton::clicked, this, &Widget::SaveImage);
     task_group_box_layout->addWidget(m_save_image_button);
 
+    auto task_status_server_group_box = new QGroupBox("server");
+    control_layout->addWidget(task_status_server_group_box);
+
+    auto task_status_server_layout = new QVBoxLayout();
+    task_status_server_group_box->setLayout(task_status_server_layout);
+
+    m_task_status_server_button = new QPushButton("server");
+    m_task_status_server_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    m_task_status_server_button->setFixedWidth(80);
+    m_task_status_server_button->setCheckable(true);
+    connect(m_task_status_server_button, &QPushButton::clicked, this, &Widget::ToggleTaskStatusServer);
+    task_status_server_layout->addWidget(m_task_status_server_button);
+
+    m_task_status_server_port_label = new QLabel("port:");
+    task_status_server_layout->addWidget(m_task_status_server_port_label);
+
+    m_task_status_server_port_line_edit = new QLineEdit("8123");
+    m_task_status_server_port_line_edit->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    m_task_status_server_port_line_edit->setFixedWidth(80);
+    task_status_server_layout->addWidget(m_task_status_server_port_line_edit);
+
     m_transform_group_box = new QGroupBox("transform");
     m_transform_group_box->setCheckable(true);
     control_layout->addWidget(m_transform_group_box);
@@ -316,7 +337,7 @@ void Widget::StartTask() {
         m_decode_image_threads.emplace_back(&PixelImageCodecWorker::DecodeImageWorker, pixel_image_codec_worker, std::ref(m_part_q), std::ref(m_frame_q), m_image_dir_path, m_dim, get_transform_fn, m_calibration);
     }
     auto save_part_worker_fn = [this, pixel_image_codec_worker](SavePartProgressCb save_part_progress_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb save_part_error_cb) {
-        pixel_image_codec_worker->SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_pixel_size, m_space_size, m_part_num, save_part_progress_cb, [] {}, save_part_complete_cb, save_part_error_cb);
+        pixel_image_codec_worker->SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_pixel_size, m_space_size, m_part_num, save_part_progress_cb, [] {}, save_part_complete_cb, save_part_error_cb, &m_task_status_server);
     };
     m_save_part_thread = std::make_unique<SavePartThread>(this, save_part_worker_fn);
     connect(m_save_part_thread.get(), &SavePartThread::SendProgress, this, &Widget::ShowTaskProgress);
@@ -392,6 +413,27 @@ void Widget::SaveImage() {
     }
 }
 
+void Widget::ToggleTaskStatusServer() {
+    if (m_task_status_server_on) {
+        m_task_status_server.Stop();
+        m_task_status_server_on = false;
+        m_task_status_server_port_line_edit->setEnabled(true);
+    } else {
+        int port = -1;
+        try {
+            port = parse_task_status_server_port(m_task_status_server_port_line_edit->text().toStdString());
+        }
+        catch (const invalid_image_codec_argument& e) {
+            QMessageBox::warning(this, "Warning", std::string("invalid task status server port '" + m_task_status_server_port_line_edit->text().toStdString() + "'").c_str(), QMessageBox::Ok, QMessageBox::Ok);
+        }
+        if (port > 0) {
+            m_task_status_server.Start(port);
+            m_task_status_server_on = true;
+            m_task_status_server_port_line_edit->setEnabled(false);
+        }
+    }
+}
+
 void Widget::SaveTransform() {
     std::lock_guard<std::mutex> lock(m_transform_mtx);
     m_transform.Save(m_output_file + ".transform");
@@ -425,7 +467,7 @@ void Widget::TransformChanged() {
             m_transform = transform;
         };
     }
-    catch (const invalid_transform_argument& e) {
+    catch (const invalid_image_codec_argument& e) {
     }
 }
 
@@ -465,9 +507,10 @@ void Widget::ShowTaskProgress(uint32_t done_part_num, uint32_t part_num, uint64_
 }
 
 void Widget::TaskComplete() {
+    StopTask();
+    m_task_button->setChecked(false);
     QMessageBox::information(this, "Info", "transfer done", QMessageBox::Ok, QMessageBox::Ok);
     //close();
-    StopTask();
 }
 
 void Widget::ErrorMsg(std::string msg) {

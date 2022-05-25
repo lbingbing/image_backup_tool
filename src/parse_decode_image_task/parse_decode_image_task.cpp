@@ -3,10 +3,9 @@
 
 #include "image_codec.h"
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
     if (argc != 3) {
-        std::cout << "parse_decode_image_task file_path show_undone_part_num";
+        std::cout << "parse_decode_image_task file_path show_undone_part_num\n";
         return 1;
     }
     Task task(argv[1]);

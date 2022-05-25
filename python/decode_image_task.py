@@ -102,3 +102,8 @@ class Task:
                     show_undone_part_num -= 1
                     if show_undone_part_num == 0:
                         break
+
+def is_part_done(task_status_bytes, part_id):
+    byte_index = part_id // 8
+    mask = 1 << (part_id % 8)
+    return bool(task_status_bytes[byte_index] & mask)

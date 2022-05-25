@@ -92,6 +92,7 @@ private:
     void StopTask();
     void ClearStatus();
     void SaveImage();
+    void ToggleTaskStatusServer();
     void SaveTransform();
     void LoadTransform();
     void TransformChanged();
@@ -120,6 +121,8 @@ private:
     std::mutex m_transform_mtx;
     std::atomic<bool> m_calibration_running = false;
     std::atomic<bool> m_task_running = false;
+    bool m_task_status_server_on = false;
+    TaskStatusServer m_task_status_server;
 
     QLabel* m_image_label = nullptr;
     std::vector<std::vector<QLabel*>> m_result_image_labels;
@@ -129,6 +132,9 @@ private:
     QPushButton* m_load_calibration_button = nullptr;
     QPushButton* m_task_button = nullptr;
     QPushButton* m_save_image_button = nullptr;
+    QPushButton* m_task_status_server_button = nullptr;
+    QLabel* m_task_status_server_port_label = nullptr;
+    QLineEdit* m_task_status_server_port_line_edit = nullptr;
     QGroupBox* m_transform_group_box = nullptr;
     QPushButton* m_save_transform_button = nullptr;
     QPushButton* m_load_transform_button = nullptr;

@@ -2,10 +2,12 @@ import os
 import sys
 import enum
 import struct
+import re
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import pixel_codec
 import decode_image_task
+import decode_image_task_status_client
 
 class Parameters:
     def __init__(self):
@@ -169,10 +171,6 @@ class CalibrationPage(QtWidgets.QWidget):
         else:
             assert 0
 
-class TaskMode(enum.Enum):
-    NEW_TASK = 0
-    EXISTING_TASK = 1
-
 class DisplayMode(enum.Enum):
     MANUAL = 0
     AUTO = 1
@@ -191,15 +189,19 @@ class TaskPage(QtWidgets.QWidget):
         self.pixel_codec = None
 
         self.target_file_path = None
-        self.task_mode = TaskMode.NEW_TASK
-        self.undone_part_ids = []
-        self.display_mode = DisplayMode.MANUAL
-        self.interval = 250
-        self.part_byte_num = None
-        self.cur_part_id = None
-        self.cur_undone_part_id_index = None
-        self.part_num = None
         self.raw_bytes = None
+        self.part_byte_num = None
+        self.part_num = None
+        self.task_status_server_on = False
+        self.task_status_server_pattern = r'(\d+\.\d+\.\d+\.\d+):(\d+)'
+        self.task_status_client = None
+        self.task_status_auto_update = False
+        self.task_status_auto_update_threshold = 200
+        self.undone_part_ids = None
+        self.cur_undone_part_id_index = None
+        self.cur_part_id = None
+        self.display_mode = DisplayMode.MANUAL
+        self.interval = 200
 
         self.timer = QtCore.QTimer(self)
 
@@ -322,13 +324,45 @@ class TaskPage(QtWidgets.QWidget):
         open_file_action.triggered.connect(self.open_task_file)
         task_file_frame_layout.addWidget(self.task_file_line_edit)
 
+        task_status_server_layout = QtWidgets.QHBoxLayout()
+        task_frame_layout.addLayout(task_status_server_layout)
+
+        self.task_status_server_checkbox = QtWidgets.QCheckBox('task_status_server')
+        self.task_status_server_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_status_server_checkbox.setFixedWidth(140)
+        self.task_status_server_checkbox.stateChanged.connect(self.toggle_task_status_server)
+        task_status_server_layout.addWidget(self.task_status_server_checkbox)
+
+        self.task_status_server_frame = QtWidgets.QFrame()
+        self.task_status_server_frame.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Sunken)
+        task_status_server_layout.addWidget(self.task_status_server_frame)
+
+        task_status_server_frame_layout = QtWidgets.QHBoxLayout(self.task_status_server_frame)
+
+        task_status_server_label= QtWidgets.QLabel('server')
+        task_status_server_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        task_status_server_label.setFixedWidth(50)
+        task_status_server_frame_layout.addWidget(task_status_server_label)
+
+        self.task_status_server_line_edit = QtWidgets.QLineEdit()
+        self.task_status_server_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_status_server_line_edit.setFixedWidth(140)
+        task_status_server_frame_layout.addWidget(self.task_status_server_line_edit)
+
+        self.task_status_auto_update_checkbox = QtWidgets.QCheckBox('auto_update')
+        self.task_status_auto_update_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_status_auto_update_checkbox.setFixedWidth(100)
+        self.task_status_auto_update_checkbox.stateChanged.connect(self.toggle_task_status_auto_update)
+        task_status_server_frame_layout.addWidget(self.task_status_auto_update_checkbox)
+
+        task_status_server_layout.addStretch(1)
+
         self.display_config_frame = QtWidgets.QFrame()
         self.display_config_frame.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Sunken)
         self.display_config_frame.setEnabled(False)
         control_frame_layout.addWidget(self.display_config_frame)
 
         display_config_frame_layout = QtWidgets.QHBoxLayout(self.display_config_frame)
-        display_config_frame_layout.setSpacing(0)
 
         self.display_mode_button = QtWidgets.QPushButton()
         self.display_mode_button.setText('auto navigate')
@@ -357,6 +391,12 @@ class TaskPage(QtWidgets.QWidget):
         self.max_part_id_label.setMinimumWidth(100)
         display_config_frame_layout.addWidget(self.max_part_id_label)
 
+        undone_part_id_num_label = QtWidgets.QLabel('undone_part_id_num')
+        undone_part_id_num_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        display_config_frame_layout.addWidget(undone_part_id_num_label)
+        self.undone_part_id_num_label = QtWidgets.QLabel('-')
+        display_config_frame_layout.addWidget(self.undone_part_id_num_label)
+
     def open_target_file(self):
         file_path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open File')
         if file_path[0]:
@@ -365,13 +405,25 @@ class TaskPage(QtWidgets.QWidget):
 
     def toggle_task_mode(self, state):
         if state == QtCore.Qt.Checked:
-            self.task_mode = TaskMode.EXISTING_TASK
             self.config_frame.setEnabled(False)
             self.task_file_frame.setEnabled(True)
         else:
-            self.task_mode = TaskMode.NEW_TASK
             self.config_frame.setEnabled(True)
             self.task_file_frame.setEnabled(False)
+
+    def toggle_task_status_server(self, state):
+        if state == QtCore.Qt.Checked:
+            self.task_status_server_on = True
+            self.task_status_server_frame.setEnabled(False)
+        else:
+            self.task_status_server_on = False
+            self.task_status_server_frame.setEnabled(True)
+
+    def toggle_task_status_auto_update(self, state):
+        if state == QtCore.Qt.Checked:
+            self.task_status_auto_update = True
+        else:
+            self.task_status_auto_update = False
 
     def open_task_file(self):
         file_path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open File', filter='Tasks (*.task)')
@@ -411,13 +463,21 @@ class TaskPage(QtWidgets.QWidget):
                 if left_bytes_num:
                     self.raw_bytes += bytes([0] * (self.part_byte_num - left_bytes_num))
                 part_num = (len(self.raw_bytes) + self.part_byte_num - 1) // self.part_byte_num
-                if self.task_mode == TaskMode.EXISTING_TASK:
+                if self.undone_part_ids:
                     assert part_num == self.part_num
                     self.cur_undone_part_id_index = 0
                     self.cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
+                    self.undone_part_id_num_label.setText(str(len(self.undone_part_ids)))
                 else:
                     self.part_num = part_num
                     self.cur_part_id = 0
+                    self.undone_part_id_num_label.setText('-')
+                if self.task_status_server_on:
+                    m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
+                    ip = m.group(1)
+                    port = int(m.group(2))
+                    self.task_status_client = decode_image_task_status_client.TaskStatusClient(ip, port)
+                    self.fetch_task_status()
                 self.task_frame.setEnabled(False)
                 self.display_config_frame.setEnabled(True)
                 self.cur_part_id_spin_box.setRange(0, self.part_num - 1)
@@ -452,6 +512,12 @@ class TaskPage(QtWidgets.QWidget):
             if self.part_byte_num <= 0:
                 valid = False
                 QtWidgets.QMessageBox.warning(self, 'Warning', "invalid part_byte_num '{}'".format(self.part_byte_num))
+        if valid:
+            if self.task_status_server_on:
+                m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
+                if not m:
+                    valid = False
+                    QtWidgets.QMessageBox.warning(self, 'Warning', "invalid task status server '{}'".format(self.task_status_server_line_edit.text()))
         return valid
 
     def toggle_display_mode(self):
@@ -495,20 +561,55 @@ class TaskPage(QtWidgets.QWidget):
                                 print('pixel_{}_{}={}'.format(x, y, data[tile_y_id][tile_x_id][y][x]), file=f)
 
     def navigate_next_part(self):
-        if self.task_mode == TaskMode.EXISTING_TASK:
-            self.cur_undone_part_id_index = self.cur_undone_part_id_index + 1 if self.cur_undone_part_id_index < len(self.undone_part_ids) - 1 else 0
-            cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
+        if self.undone_part_ids:
+            need_normal_navigate = True
+            if self.task_status_auto_update and len(self.undone_part_ids) > self.task_status_auto_update_threshold and self.cur_undone_part_id_index == len(self.undone_part_ids) - 1:
+                need_normal_navigate = not self.update_task_status()
+            if need_normal_navigate:
+                self.cur_undone_part_id_index = self.cur_undone_part_id_index + 1 if self.cur_undone_part_id_index < len(self.undone_part_ids) - 1 else 0
+                cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
+                self.cur_part_id_spin_box.setValue(cur_part_id)
         else:
-            cur_part_id = self.cur_part_id + 1 if self.cur_part_id < self.part_num - 1 else 0
-        self.cur_part_id_spin_box.setValue(cur_part_id)
+            need_normal_navigate = True
+            if self.task_status_auto_update and self.part_num > self.task_status_auto_update_threshold and self.cur_part_id == self.part_num - 1:
+                need_normal_navigate = not self.update_task_status()
+            if need_normal_navigate:
+                cur_part_id = self.cur_part_id + 1 if self.cur_part_id < self.part_num - 1 else 0
+                self.cur_part_id_spin_box.setValue(cur_part_id)
 
     def navigate_prev_part(self):
-        if self.task_mode == TaskMode.EXISTING_TASK:
+        if self.undone_part_ids:
             self.cur_undone_part_id_index = self.cur_undone_part_id_index - 1 if self.cur_undone_part_id_index > 0 else len(self.undone_part_ids) - 1
             cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
         else:
             cur_part_id = self.cur_part_id - 1 if self.cur_part_id > 0 else self.part_num - 1
         self.cur_part_id_spin_box.setValue(cur_part_id)
+
+    def fetch_task_status(self):
+        task_status_bytes = self.task_status_client.get_task_status()
+        if task_status_bytes:
+            assert len(task_status_bytes) == (self.part_num + 7) // 8
+            self.undone_part_ids = [part_id for part_id in range(self.part_num) if not decode_image_task.is_part_done(task_status_bytes, part_id)]
+            self.cur_undone_part_id_index = 0
+            self.cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
+            self.cur_part_id_spin_box.setValue(self.cur_part_id)
+            self.undone_part_id_num_label.setText(str(len(self.undone_part_ids)))
+            return True
+        else:
+            return False
+
+    def update_task_status(self):
+        if self.task_status_server_on:
+            self.display_config_frame.setEnabled(False)
+            if self.display_mode == DisplayMode.AUTO:
+                self.timer.stop()
+            success = self.fetch_task_status()
+            if self.display_mode == DisplayMode.AUTO:
+                self.timer.start(self.interval)
+            self.display_config_frame.setEnabled(True)
+            return success
+        else:
+            return False
 
 class Canvas(QtWidgets.QWidget):
     def __init__(self, parameters, context):
@@ -714,6 +815,8 @@ class Widget(QtWidgets.QWidget):
                     self.task_page.navigate_prev_part()
                 elif event.key() == QtCore.Qt.Key_Right:
                     self.task_page.navigate_next_part()
+                elif event.key() == QtCore.Qt.Key_T:
+                    self.task_page.update_task_status()
         elif self.context.state == State.CALIBRATE:
             if event.type() == QtCore.QEvent.KeyPress:
                 if event.key() == QtCore.Qt.Key_F:

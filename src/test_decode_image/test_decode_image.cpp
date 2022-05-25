@@ -5,8 +5,7 @@
 
 #include "image_codec.h"
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
     try {
         std::string image_file;
         std::string calibration_file;

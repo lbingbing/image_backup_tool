@@ -4,8 +4,7 @@
 
 #include "image_codec.h"
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
     try {
         std::string image_file;
         boost::program_options::options_description desc("usage");

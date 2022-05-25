@@ -20,8 +20,7 @@ void consumer(ThreadSafeQueue<int>& q) {
     std::cout << last << "\n";
 }
 
-int main()
-{
+int main() {
     int num = 1024;
     ThreadSafeQueue<int> q(4);
     std::thread producer_thread(producer, std::ref(q), num);

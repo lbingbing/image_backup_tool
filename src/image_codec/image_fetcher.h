@@ -66,7 +66,7 @@ protected:
 
 private:
     boost::asio::io_context io_context;
-    boost::asio::ip::tcp::socket m_socket{ io_context };
+    boost::asio::ip::tcp::socket m_socket{io_context};
 };
 
 IMAGE_CODEC_API std::unique_ptr<ImageFetcher> create_image_fetcher();

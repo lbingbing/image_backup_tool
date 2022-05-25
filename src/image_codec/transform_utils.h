@@ -9,7 +9,7 @@
 #include <opencv2/opencv.hpp>
 
 #include "image_codec_api.h"
-#include "pixel_codec.h"
+#include "image_codec_types.h"
 
 struct Transform {
     std::vector<float> bbox{ 0, 0, 1, 1 };
@@ -64,42 +64,6 @@ std::pair<int, int> detect_non_white_corner_nw(const cv::Mat& img);
 std::pair<int, int> detect_non_white_corner_ne(const cv::Mat& img);
 std::pair<int, int> detect_non_white_corner_sw(const cv::Mat& img);
 std::pair<int, int> detect_non_white_corner_se(const cv::Mat& img);
-
-class invalid_transform_argument : public std::invalid_argument {
-public:
-    invalid_transform_argument(const std::string& what_arg) : std::invalid_argument(what_arg) {}
-};
-
-template <typename T>
-const char* TypeNameStr = "unknown";
-template <>
-const char* TypeNameStr<int> = "int";
-template <>
-const char* TypeNameStr<float> = "float";
-
-template <typename T> inline T stox(const std::string& s);
-template <> inline int stox(const std::string& s) { return std::stoi(s); }
-template <> inline float stox(const std::string& s) { return std::stof(s); }
-
-template <typename T>
-inline std::vector<T> parse_vec(const std::string& str) {
-    std::vector<T> vec;
-    size_t pos = 0;
-    while (true) {
-        auto pos1 = str.find(",", pos);
-        auto s = str.substr(pos, pos1 == std::string::npos ? std::string::npos : pos1 - pos);
-        if (s[0] == 'n') s.replace(0, 1, "-");
-        try {
-            vec.push_back(stox<T>(s));
-        }
-        catch (const std::exception&) {
-            throw invalid_transform_argument("invalid " + std::string(TypeNameStr<T>) +"s '" + str + "'");
-        }
-        if (pos1 == std::string::npos) break;
-        pos = pos1 + 1;
-    }
-    return vec;
-}
 
 IMAGE_CODEC_API std::vector<float> parse_bbox(const std::string& bbox_str);
 IMAGE_CODEC_API std::string get_bbox_str(const std::vector<float>& bbox);

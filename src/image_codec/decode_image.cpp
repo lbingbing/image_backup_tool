@@ -6,25 +6,6 @@
 
 #include "decode_image.h"
 
-bool operator==(const Dim& dim1, const Dim& dim2) {
-    return dim1.tile_x_num == dim2.tile_x_num && dim1.tile_y_num == dim2.tile_y_num && dim1.tile_x_size == dim2.tile_x_size && dim1.tile_y_size == dim2.tile_y_size;
-}
-
-bool operator!=(const Dim& dim1, const Dim& dim2) {
-    return !(dim1 == dim2);
-}
-
-std::ostream& operator<<(std::ostream& os, const Dim& dim) {
-    os << "(" << dim.tile_x_num << "," << dim.tile_y_num << "," << dim.tile_x_size << "," << dim.tile_y_size << ")";
-    return os;
-}
-
-Dim parse_dim(const std::string& dim_str) {
-    auto dims = parse_vec<int>(dim_str);
-    if (dims.size() != 4) throw std::invalid_argument("invalid dim");
-    return { dims[0], dims[1], dims[2], dims[3] };
-}
-
 void Calibration::Load(const std::string& path) {
     std::ifstream f(path, std::ios_base::binary);
     int vld = 0;

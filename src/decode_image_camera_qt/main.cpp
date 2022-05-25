@@ -2,8 +2,7 @@
 #include <QtCore/QCommandLineParser>
 #include "Widget.h"
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
     try {
         QApplication app(argc, argv);
         QCommandLineParser parser;

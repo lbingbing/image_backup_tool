@@ -4,8 +4,8 @@
 #include <chrono>
 #include <thread>
 
-#include "image_fetcher.h"
 #include "decode_image_thread.h"
+#include "image_fetcher.h"
 
 void PixelImageCodecWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q) {
     while (running) {
@@ -75,7 +75,7 @@ void PixelImageCodecWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& par
     }
 }
 
-void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb progress_cb, SavePartFinishCb finish_cb, SavePartCompleteCb complete_cb, SavePartErrorCb error_cb) {
+void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb progress_cb, SavePartFinishCb finish_cb, SavePartCompleteCb complete_cb, SavePartErrorCb error_cb, TaskStatusServer* task_status_server) {
     PixelType pixel_type = GetPixelImageCodec().GetPixelCodec().GetPixelType();
     Task task(output_file);
     if (std::filesystem::is_regular_file(task.TaskPath())) {
@@ -134,6 +134,9 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
             left_seconds = static_cast<int64_t>(done_fps > 0.1f ? (part_num - task.DonePartNum()) / done_fps : -1);
         }
         progress_cb(task.DonePartNum(), part_num, frame_num, fps, done_fps, bps, left_seconds);
+        if (task_status_server && task_status_server->IsRunning() && (frame_num & 0xff) == 0) {
+            task_status_server->UpdateTaskStatus(task.GetTaskStatusBytes());
+        }
         if (task.IsDone()) {
             complete_cb();
             running = false;

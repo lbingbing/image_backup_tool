@@ -1,21 +1,9 @@
 #pragma once
 
 #include "image_codec_api.h"
+#include "image_codec_types.h"
 #include "transform_utils.h"
 #include "pixel_codec.h"
-
-struct Dim {
-    int tile_x_num = 0;
-    int tile_y_num = 0;
-    int tile_x_size = 0;
-    int tile_y_size = 0;
-};
-
-IMAGE_CODEC_API bool operator==(const Dim& dim1, const Dim& dim2);
-IMAGE_CODEC_API bool operator!=(const Dim& dim1, const Dim& dim2);
-IMAGE_CODEC_API std::ostream& operator<<(std::ostream& os, const Dim& dim);
-
-IMAGE_CODEC_API Dim parse_dim(const std::string& dim_str);
 
 struct TileCalibration {
     std::vector<std::vector<std::pair<float, float>>> centers;

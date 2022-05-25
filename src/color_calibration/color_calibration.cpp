@@ -153,8 +153,7 @@ void scan(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim
     result_worker_thread.join();
 }
 
-int main(int argc, char** argv)
-{
+int main(int argc, char** argv) {
     try {
         std::string image_file;
         std::string calibration_file;

@@ -51,7 +51,7 @@ std::vector<float> parse_bbox(const std::string& bbox_str) {
         fail = true;
     }
     if (fail || bbox.size() != 4 || bbox[0] < 0 || bbox[1] < 0 || bbox[2] > 1 || bbox[3] > 1) {
-        throw invalid_transform_argument("invalid bbox '" + bbox_str + "'");
+        throw invalid_image_codec_argument("invalid bbox '" + bbox_str + "'");
     }
     return bbox;
 }
@@ -83,7 +83,7 @@ std::vector<float> parse_sphere(const std::string& sphere_str) {
         fail = true;
     }
     if (fail || sphere.size() != 4) {
-        throw invalid_transform_argument("invalid sphere coeff '" + sphere_str + "'");
+        throw invalid_image_codec_argument("invalid sphere coeff '" + sphere_str + "'");
     }
     return sphere;
 }
@@ -179,7 +179,7 @@ std::vector<float> parse_quad(const std::string& quad_str) {
         fail = true;
     }
     if (fail || quad.size() != 8) {
-        throw invalid_transform_argument("invalid quad coeff '" + quad_str + "'");
+        throw invalid_image_codec_argument("invalid quad coeff '" + quad_str + "'");
     }
     return quad;
 }
@@ -329,7 +329,7 @@ int parse_filter_level(const std::string& filter_level_str) {
         fail = true;
     }
     if (fail || filter_level < 0) {
-        throw invalid_transform_argument("invalid filter level'" + filter_level_str + "'");
+        throw invalid_image_codec_argument("invalid filter level '" + filter_level_str + "'");
     }
     return filter_level;
 }
@@ -365,7 +365,7 @@ int parse_binarization_threshold(const std::string& binarization_threshold_str) 
         fail = true;
     }
     if (fail || binarization_threshold < 0 || binarization_threshold > 255) {
-        throw invalid_transform_argument("invalid binarization threshold '" + binarization_threshold_str + "'");
+        throw invalid_image_codec_argument("invalid binarization threshold '" + binarization_threshold_str + "'");
     }
     return binarization_threshold;
 }
@@ -394,7 +394,7 @@ std::vector<int> parse_pixelization_threshold(const std::string& pixelization_th
         pixelization_threshold[0] < 0 || pixelization_threshold[0] > 255 ||
         pixelization_threshold[1] < 0 || pixelization_threshold[1] > 255 ||
         pixelization_threshold[2] < 0 || pixelization_threshold[2] > 255) {
-        throw invalid_transform_argument("invalid pixelization threshold '" + pixelization_threshold_str + "'");
+        throw invalid_image_codec_argument("invalid pixelization threshold '" + pixelization_threshold_str + "'");
     }
     return pixelization_threshold;
 }

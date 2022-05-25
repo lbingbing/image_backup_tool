@@ -55,7 +55,7 @@ void start(const std::string& output_file, const Dim& dim, PixelType pixel_type,
     auto save_part_error_cb = [](std::string msg) {
         std::cerr << msg << "\n";
     };
-    std::thread save_part_thread(&PixelImageCodecWorker::SavePartWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(part_q), output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, save_part_error_cb);
+    std::thread save_part_thread(&PixelImageCodecWorker::SavePartWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(part_q), output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, save_part_error_cb, nullptr);
     fetch_image_thread.join();
     for (size_t i = 0; i < decode_image_threads.size() + 1; ++i) {
         frame_q.PushNull();
