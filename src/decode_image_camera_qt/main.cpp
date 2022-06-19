@@ -15,7 +15,6 @@ int main(int argc, char *argv[]) {
         parser.addPositionalArgument("space_size", "space size");
         parser.addPositionalArgument("part_num", "part num");
         parser.addOptions({
-            {"image_dir_path", "image dir path", "path"},
             {"mp", "multiprocessing", "number"},
         });
         parser.process(app);
@@ -29,15 +28,11 @@ int main(int argc, char *argv[]) {
         int pixel_size = std::stoi(args.at(3).toStdString());
         int space_size = std::stoi(args.at(4).toStdString());
         uint32_t part_num = std::stoul(args.at(5).toStdString());
-        std::string image_dir_path;
-        if (parser.isSet("image_dir_path")) {
-            image_dir_path = parser.value("image_dir_path").toStdString();
-        }
         int mp = 1;
         if (parser.isSet("mp")) {
             mp = std::stoi(parser.value("mp").toStdString());
         }
-        Widget widget(nullptr, output_file, dim, pixel_type, pixel_size, space_size, part_num, image_dir_path, mp);
+        Widget widget(nullptr, output_file, dim, pixel_type, pixel_size, space_size, part_num, mp);
         widget.show();
         return app.exec();
     }

@@ -2,6 +2,7 @@
 #include <map>
 #include <exception>
 #include <thread>
+#include <filesystem>
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
@@ -86,7 +87,7 @@ bool is_mismatch(const Pixels& part_pixels, PixelImageCodec* pixel_image_codec, 
 using InputQueue = ThreadSafeQueue<std::tuple<int, int, int>>;
 using ResultQueue = ThreadSafeQueue<std::tuple<bool, int, int, int>>;
 
-void scan_worker(ResultQueue& q_result, InputQueue& q_in, PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+void scan1_worker(ResultQueue& q_result, InputQueue& q_in, PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
     Transform transform1 = transform;
     while (true) {
         auto data = q_in.Pop();
@@ -104,7 +105,7 @@ void scan_worker(ResultQueue& q_result, InputQueue& q_in, PixelImageCodec* pixel
     }
 }
 
-void result_worker(ResultQueue& q_result, int total) {
+void scan1_result_worker(ResultQueue& q_result, int total) {
     int done = 0;
     while (true) {
         auto data = q_result.Pop();
@@ -119,13 +120,13 @@ void result_worker(ResultQueue& q_result, int total) {
     std::cerr << "\n";
 }
 
-void scan(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, int scan_radius) {
-    int b0 = std::max(transform.pixelization_threshold[0] - scan_radius, 0);
-    int b1 = std::min(transform.pixelization_threshold[0] + scan_radius, 255);
-    int g0 = std::max(transform.pixelization_threshold[1] - scan_radius, 0);
-    int g1 = std::min(transform.pixelization_threshold[1] + scan_radius, 255);
-    int r0 = std::max(transform.pixelization_threshold[2] - scan_radius, 0);
-    int r1 = std::min(transform.pixelization_threshold[2] + scan_radius, 255);
+void scan1(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, int scan_bgr_radius) {
+    int b0 = std::max(transform.pixelization_threshold[0] - scan_bgr_radius, 0);
+    int b1 = std::min(transform.pixelization_threshold[0] + scan_bgr_radius, 255);
+    int g0 = std::max(transform.pixelization_threshold[1] - scan_bgr_radius, 0);
+    int g1 = std::min(transform.pixelization_threshold[1] + scan_bgr_radius, 255);
+    int r0 = std::max(transform.pixelization_threshold[2] - scan_bgr_radius, 0);
+    int r1 = std::min(transform.pixelization_threshold[2] + scan_bgr_radius, 255);
     int total = (b1 - b0) * (g1 - g0) * (r1 - r0);
 
     constexpr int worker_num = 4;
@@ -133,9 +134,9 @@ void scan(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim
     ResultQueue q_result(1024);
     std::vector<std::thread> scan_worker_threads;
     for (int i = 0; i < worker_num; ++i) {
-        scan_worker_threads.emplace_back(scan_worker, std::ref(q_result), std::ref(q_in), pixel_image_codec, img, dim, transform, calibration);
+        scan_worker_threads.emplace_back(scan1_worker, std::ref(q_result), std::ref(q_in), pixel_image_codec, img, dim, transform, calibration);
     }
-    std::thread result_worker_thread(result_worker, std::ref(q_result), total);
+    std::thread result_worker_thread(scan1_result_worker, std::ref(q_result), total);
     for (int b = b0; b < b1; ++b) {
         for (int g = g0; g < g1; ++g) {
             for (int r = r0; r < r1; ++r) {
@@ -153,12 +154,30 @@ void scan(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim
     result_worker_thread.join();
 }
 
+void scan2(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+    for (int c = 0; c < 256; ++c) {
+        Transform transform1 = transform;
+        transform1.pixelization_threshold[0] = c;
+        transform1.pixelization_threshold[1] = c;
+        transform1.pixelization_threshold[2] = c;
+        auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = pixel_image_codec->Decode(img, dim, transform1, calibration, true);
+        std::cout << "bgr: " << c << "," << c << "," << c << " ";
+        if (!part_pixels.empty() && !is_mismatch(part_pixels, pixel_image_codec, dim)) {
+            std::cout << "pass";
+        } else {
+            std::cout << "fail";
+        }
+        std::cout << "\n";
+    }
+}
+
 int main(int argc, char** argv) {
     try {
         std::string image_file;
         std::string calibration_file;
         bool save_result_image = false;
-        int scan_radius = 0;
+        int scan_mode = 0;
+        int scan_bgr_radius = 0;
         int print_detailed_mismatch_info_level = 0;
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
@@ -168,7 +187,8 @@ int main(int argc, char** argv) {
         desc_handler("pixel_type", boost::program_options::value<std::string>(), "pixel type");
         desc_handler("calibration_file", boost::program_options::value<std::string>(&calibration_file), "calibration file");
         desc_handler("save_result_image", boost::program_options::value<bool>(&save_result_image), "dump result image");
-        desc_handler("scan_radius", boost::program_options::value<int>(&scan_radius), "scan radius");
+        desc_handler("scan_mode", boost::program_options::value<int>(&scan_mode), "scan mode, 1: bgr; 2: gray");
+        desc_handler("scan_bgr_radius", boost::program_options::value<int>(&scan_bgr_radius), "scan bgr radius");
         desc_handler("print_detailed_mismatch_info_level", boost::program_options::value<int>(&print_detailed_mismatch_info_level), "print detailed mismatch info");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
@@ -188,6 +208,10 @@ int main(int argc, char** argv) {
             throw std::invalid_argument("image_file not specified");
         }
 
+        if (!std::filesystem::is_regular_file(image_file)) {
+            throw std::invalid_argument("image file '" + image_file + "' not found");
+        }
+
         if (!vm.count("dim")) {
             throw std::invalid_argument("dim not specified");
         }
@@ -205,10 +229,12 @@ int main(int argc, char** argv) {
         }
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
-        if (scan_radius) {
-            scan(pixel_image_codec.get(), img, dim, transform, calibration, scan_radius);
-        } else {
+        if (scan_mode == 0) {
             decode(pixel_image_codec.get(), img, dim, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
+        } else if (scan_mode == 1) {
+            scan1(pixel_image_codec.get(), img, dim, transform, calibration, scan_bgr_radius);
+        } else if (scan_mode == 2) {
+            scan2(pixel_image_codec.get(), img, dim, transform, calibration);
         }
     }
     catch (std::exception& e) {

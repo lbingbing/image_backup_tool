@@ -2,6 +2,7 @@
 #include <string>
 #include <vector>
 #include <exception>
+#include <filesystem>
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
@@ -33,6 +34,10 @@ int main(int argc, char** argv) {
 
         if (!vm.count("image_file")) {
             throw std::invalid_argument("image_file not specified");
+        }
+
+        if (!std::filesystem::is_regular_file(image_file)) {
+            throw std::invalid_argument("image file '" + image_file + "' not found");
         }
 
         Transform transform = get_transform(vm);

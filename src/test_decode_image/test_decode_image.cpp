@@ -1,15 +1,132 @@
 #include <iostream>
 #include <map>
 #include <exception>
+#include <thread>
+#include <filesystem>
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
+
+void decode(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file) {
+    auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = pixel_image_codec->Decode(img, dim, transform, calibration, true);
+    if (save_result_image) {
+        auto pos = image_file.rfind(".");
+        auto image_file_prefix = image_file.substr(0, pos);
+        auto image_file_suffix = image_file.substr(pos);
+        cv::imwrite(image_file_prefix + "_transformed" + image_file_suffix, img1);
+        auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;
+        if (!result_imgs.empty()) {
+            for (int tile_y_id = 0; tile_y_id < tile_y_num; ++tile_y_id) {
+                for (int tile_x_id = 0; tile_x_id < tile_x_num; ++tile_x_id) {
+                    if (!result_imgs[tile_y_id][tile_x_id].empty()) {
+                        std::string file_name = image_file_prefix + "_result_" + std::to_string(tile_x_id) + "_" + std::to_string(tile_y_id) + image_file_suffix;
+                        cv::imwrite(file_name, result_imgs[tile_y_id][tile_x_id]);
+                    }
+                }
+            }
+        }
+    }
+    if (success) {
+        std::cout << "pass part_id=" << part_id << "\n";
+    } else {
+        std::cout << "fail\n";
+    }
+}
+
+using InputQueue = ThreadSafeQueue<std::tuple<int, int, int>>;
+using ResultQueue = ThreadSafeQueue<std::tuple<bool, int, int, int>>;
+
+void scan1_worker(ResultQueue& q_result, InputQueue& q_in, PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+    Transform transform1 = transform;
+    while (true) {
+        auto data = q_in.Pop();
+        if (!data) break;
+        auto [b, g, r] = data.value();
+        transform1.pixelization_threshold[0] = b;
+        transform1.pixelization_threshold[1] = g;
+        transform1.pixelization_threshold[2] = r;
+        auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = pixel_image_codec->Decode(img, dim, transform1, calibration, true);
+        if (success) {
+            q_result.Emplace(true, b, g, r);
+        } else {
+            q_result.Emplace(false, 0, 0, 0);
+        }
+    }
+}
+
+void scan1_result_worker(ResultQueue& q_result, int total) {
+    int done = 0;
+    while (true) {
+        auto data = q_result.Pop();
+        if (!data) break;
+        auto [success, b, g, r] = data.value();
+        if (success) {
+            std::cout << "\nbgr: " << b << "," << g << "," << r << "\n";
+        }
+        ++done;
+        std::cerr << "\r" << done << "/" << total;
+    }
+    std::cerr << "\n";
+}
+
+void scan1(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, int scan_bgr_radius) {
+    int b0 = std::max(transform.pixelization_threshold[0] - scan_bgr_radius, 0);
+    int b1 = std::min(transform.pixelization_threshold[0] + scan_bgr_radius, 255);
+    int g0 = std::max(transform.pixelization_threshold[1] - scan_bgr_radius, 0);
+    int g1 = std::min(transform.pixelization_threshold[1] + scan_bgr_radius, 255);
+    int r0 = std::max(transform.pixelization_threshold[2] - scan_bgr_radius, 0);
+    int r1 = std::min(transform.pixelization_threshold[2] + scan_bgr_radius, 255);
+    int total = (b1 - b0) * (g1 - g0) * (r1 - r0);
+
+    constexpr int worker_num = 4;
+    InputQueue q_in(1024);
+    ResultQueue q_result(1024);
+    std::vector<std::thread> scan_worker_threads;
+    for (int i = 0; i < worker_num; ++i) {
+        scan_worker_threads.emplace_back(scan1_worker, std::ref(q_result), std::ref(q_in), pixel_image_codec, img, dim, transform, calibration);
+    }
+    std::thread result_worker_thread(scan1_result_worker, std::ref(q_result), total);
+    for (int b = b0; b < b1; ++b) {
+        for (int g = g0; g < g1; ++g) {
+            for (int r = r0; r < r1; ++r) {
+                q_in.Emplace(b, g, r);
+            }
+        }
+    }
+    for (int i = 0; i < worker_num; ++i) {
+        q_in.PushNull();
+    }
+    for (auto& e : scan_worker_threads) {
+        e.join();
+    }
+    q_result.PushNull();
+    result_worker_thread.join();
+}
+
+void scan2(PixelImageCodec* pixel_image_codec, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+    for (int c = 0; c < 256; ++c) {
+        Transform transform1 = transform;
+        transform1.pixelization_threshold[0] = c;
+        transform1.pixelization_threshold[1] = c;
+        transform1.pixelization_threshold[2] = c;
+        auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = pixel_image_codec->Decode(img, dim, transform1, calibration, true);
+        std::cout << "bgr: " << c << "," << c << "," << c << " ";
+        if (success) {
+            std::cout << "pass";
+        } else {
+            std::cout << "fail";
+        }
+        std::cout << "\n";
+    }
+}
 
 int main(int argc, char** argv) {
     try {
         std::string image_file;
         std::string calibration_file;
         bool save_result_image = false;
+        int scan_mode = 0;
+        int scan_bgr_radius = 0;
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
@@ -18,6 +135,8 @@ int main(int argc, char** argv) {
         desc_handler("pixel_type", boost::program_options::value<std::string>(), "pixel type");
         desc_handler("calibration_file", boost::program_options::value<std::string>(&calibration_file), "calibration file");
         desc_handler("save_result_image", boost::program_options::value<bool>(&save_result_image), "dump result image");
+        desc_handler("scan_mode", boost::program_options::value<int>(&scan_mode), "scan mode, 1: bgr; 2: gray");
+        desc_handler("scan_bgr_radius", boost::program_options::value<int>(&scan_bgr_radius), "scan radius");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
         p_desc.add("image_file", 1);
@@ -34,6 +153,10 @@ int main(int argc, char** argv) {
 
         if (!vm.count("image_file")) {
             throw std::invalid_argument("image_file not specified");
+        }
+
+        if (!std::filesystem::is_regular_file(image_file)) {
+            throw std::invalid_argument("image file '" + image_file + "' not found");
         }
 
         if (!vm.count("dim")) {
@@ -53,28 +176,12 @@ int main(int argc, char** argv) {
         }
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
-        auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = pixel_image_codec->Decode(img, dim, transform, calibration, true);
-        if (save_result_image) {
-            auto pos = image_file.rfind(".");
-            auto image_file_prefix = image_file.substr(0, pos);
-            auto image_file_suffix = image_file.substr(pos);
-            cv::imwrite(image_file_prefix + "_transformed" + image_file_suffix, img1);
-            auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;
-            if (!result_imgs.empty()) {
-                for (int tile_y_id = 0; tile_y_id < tile_y_num; ++tile_y_id) {
-                    for (int tile_x_id = 0; tile_x_id < tile_x_num; ++tile_x_id) {
-                        if (!result_imgs[tile_y_id][tile_x_id].empty()) {
-                            std::string file_name = image_file_prefix + "_result_" + std::to_string(tile_x_id) + "_" + std::to_string(tile_y_id) + image_file_suffix;
-                            cv::imwrite(file_name, result_imgs[tile_y_id][tile_x_id]);
-                        }
-                    }
-                }
-            }
-        }
-        if (success) {
-            std::cout << "pass part_id=" << part_id << "\n";
-        } else {
-            std::cout << "fail\n";
+        if (scan_mode == 0) {
+            decode(pixel_image_codec.get(), img, dim, transform, calibration, save_result_image, image_file);
+        } else if (scan_mode == 1) {
+            scan1(pixel_image_codec.get(), img, dim, transform, calibration, scan_bgr_radius);
+        } else if (scan_mode == 2) {
+            scan2(pixel_image_codec.get(), img, dim, transform, calibration);
         }
     }
     catch (std::exception& e) {

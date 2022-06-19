@@ -79,7 +79,7 @@ void Task::UpdatePart(uint32_t part_id, Bytes part_bytes) {
     encrypt_part_bytes(part_bytes);
     m_blob_buf.emplace_back(part_id, std::move(part_bytes));
 
-    if ((m_done_part_num & 0xff) == 0) {
+    if ((m_done_part_num & 0x3ff) == 0) {
         Flush();
     }
 }

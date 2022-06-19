@@ -477,7 +477,8 @@ class TaskPage(QtWidgets.QWidget):
                     ip = m.group(1)
                     port = int(m.group(2))
                     self.task_status_client = decode_image_task_status_client.TaskStatusClient(ip, port)
-                    self.fetch_task_status()
+                    if self.task_status_auto_update:
+                        self.fetch_task_status()
                 self.task_frame.setEnabled(False)
                 self.display_config_frame.setEnabled(True)
                 self.cur_part_id_spin_box.setRange(0, self.part_num - 1)

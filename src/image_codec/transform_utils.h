@@ -12,11 +12,11 @@
 #include "image_codec_types.h"
 
 struct Transform {
-    std::vector<float> bbox{ 0, 0, 1, 1 };
-    std::vector<float> sphere{ 0, 0, 0, 0 };
+    std::vector<float> bbox{0, 0, 1, 1};
+    std::vector<float> sphere{0, 0, 0, 0};
     int filter_level = 0;
     int binarization_threshold = 128;
-    std::vector<int> pixelization_threshold{ 128, 128, 128 };
+    std::vector<int> pixelization_threshold{128, 128, 128};
 
     IMAGE_CODEC_API void Load(const std::string& path);
     IMAGE_CODEC_API void Save(const std::string& path);

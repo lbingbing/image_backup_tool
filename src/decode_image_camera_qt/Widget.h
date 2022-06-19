@@ -2,9 +2,11 @@
 
 #include <QtWidgets/QWidget>
 #include <QtWidgets/QGroupBox>
+#include <QtWidgets/QFrame>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QProgressBar>
 #include <QThread>
 
 #include "image_codec.h"
@@ -14,35 +16,52 @@ class CalibrateThread : public QThread
     Q_OBJECT
 
 public:
-    CalibrateThread(QObject* parent, std::function<void(CalibrateCb, SendResultCb, CalibrateProgressCb)> worker_fn);
+    CalibrateThread(QObject* parent, std::function<void(CalibrateCb, SendCalibrationImageResultCb, CalibrationProgressCb)> worker_fn);
 
 signals:
     void SendCalibration(Calibration);
-    void SendResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
-    void SendProgress(uint64_t frame_num, float fps);
+    void SendCalibrationImageResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
+    void SendCalibrationProgress(CalibrationProgress calibration_progress);
 
 protected:
     void run() override;
 
 private:
-    std::function<void(CalibrateCb, SendResultCb, CalibrateProgressCb)> m_worker_fn;
+    std::function<void(CalibrateCb, SendCalibrationImageResultCb, CalibrationProgressCb)> m_worker_fn;
 };
 
-class DecodeResultThread : public QThread
+class DecodeImageResultThread : public QThread
 {
     Q_OBJECT
 
 public:
-    DecodeResultThread(QObject* parent, std::function<void(SendResultCb)> worker_fn);
+    DecodeImageResultThread(QObject* parent, std::function<void(SendDecodeImageResultCb)> worker_fn);
 
 signals:
-    void SendResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
+    void SendDecodeImageResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
 
 protected:
     void run() override;
 
 private:
-    std::function<void(SendResultCb)> m_worker_fn;
+    std::function<void(SendDecodeImageResultCb)> m_worker_fn;
+};
+
+class AutoTransformThread : public QThread
+{
+    Q_OBJECT
+
+public:
+    AutoTransformThread(QObject* parent, std::function<void(SendAutoTransformCb)> worker_fn);
+
+signals:
+    void SendAutoTransform(Transform transform);
+
+protected:
+    void run() override;
+
+private:
+    std::function<void(SendAutoTransformCb)> m_worker_fn;
 };
 
 class SavePartThread : public QThread
@@ -53,9 +72,9 @@ public:
     SavePartThread(QObject* parent, std::function<void(SavePartProgressCb, SavePartCompleteCb, SavePartErrorCb)> worker_fn);
 
 signals:
-    void SendProgress(uint32_t done_part_num, uint32_t part_num, uint64_t frame_num, float fps, float done_fps, float bps, int64_t left_seconds);
-    void SendComplete();
-    void SendError(std::string msg);
+    void SendTaskProgress(TaskProgress task_progress);
+    void SendTaskComplete();
+    void SendTaskError(std::string msg);
 
 protected:
     void run() override;
@@ -69,33 +88,38 @@ class Widget : public QWidget
     Q_OBJECT
 
 public:
-    Widget(QWidget* parent, const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, const std::string& image_dir_path, int mp);
+    Widget(QWidget* parent, const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, int mp);
 
 private slots:
     void ToggleCalibrationStartStop();
-    void ToggleTaskStartStop();
-    void closeEvent(QCloseEvent* event) override;
-    void ReceiveCalibration(Calibration calibration);
-    void ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs);
-    void ShowCalibrationProgress(uint64_t frame_num, float fps);
-    void ShowTaskProgress(uint32_t done_part_num, uint32_t part_num, uint64_t frame_num, float fps, float done_fps, float bps, int64_t left_seconds);
-    void TaskComplete();
-    void ErrorMsg(std::string msg);
-
-private:
-    void StartCalibration();
-    void StopCalibration();
     void SaveCalibration();
     void LoadCalibration();
     void ClearCalibration();
-    void StartTask();
-    void StopTask();
-    void ClearStatus();
+    void ToggleTaskStartStop();
+    void ReceiveCalibration(Calibration calibration);
+    void ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs);
+    void ShowCalibrationProgress(CalibrationProgress calibration_progress);
+    void ShowTaskProgress(TaskProgress task_progress);
+    void ToggleMonitor();
     void SaveImage();
     void ToggleTaskStatusServer();
     void SaveTransform();
     void LoadTransform();
     void TransformChanged();
+    void UpdateAutoTransform(Transform transform);
+    void TaskComplete();
+    void ErrorMsg(std::string msg);
+    void closeEvent(QCloseEvent* event) override;
+
+private:
+    void StartCalibration();
+    void StopCalibration();
+    void StartTask();
+    void StopTask();
+    void ClearStatus();
+    void ClearImages();
+    void UpdateTransform(const Transform& transform);
+    void UpdateTransformUI(const Transform& transform);
 
     std::string m_output_file;
     Dim m_dim;
@@ -103,24 +127,24 @@ private:
     int m_pixel_size = 0;
     int m_space_size = 0;
     uint32_t m_part_num = 0;
-    std::string m_image_dir_path;
     int m_mp = 0;
     Transform m_transform;
     Calibration m_calibration;
     cv::Mat m_image;
     std::vector<std::vector<cv::Mat>> m_result_images;
-    ThreadSafeQueue<std::pair<uint64_t, cv::Mat>> m_frame_q{60};
-    ThreadSafeQueue<DecodeResult> m_part_q{60};
+    ThreadSafeQueue<std::pair<uint64_t, cv::Mat>> m_frame_q{128};
+    ThreadSafeQueue<DecodeResult> m_part_q{128};
 
-    std::unique_ptr<CalibrateThread> m_calibrate_thread;
-    std::unique_ptr<DecodeResultThread> m_decode_result_thread;
-    std::unique_ptr<std::thread> m_show_task_result_thread;
     std::unique_ptr<std::thread> m_fetch_image_thread;
+    std::unique_ptr<CalibrateThread> m_calibrate_thread;
     std::vector<std::thread> m_decode_image_threads;
+    std::unique_ptr<DecodeImageResultThread> m_decode_image_result_thread;
+    std::unique_ptr<AutoTransformThread> m_auto_transform_thread;
     std::unique_ptr<SavePartThread> m_save_part_thread;
     std::mutex m_transform_mtx;
     std::atomic<bool> m_calibration_running = false;
     std::atomic<bool> m_task_running = false;
+    bool m_monitor_on = true;
     bool m_task_status_server_on = false;
     TaskStatusServer m_task_status_server;
 
@@ -131,11 +155,11 @@ private:
     QPushButton* m_save_calibration_button = nullptr;
     QPushButton* m_load_calibration_button = nullptr;
     QPushButton* m_task_button = nullptr;
+    QPushButton* m_monitor_button = nullptr;
     QPushButton* m_save_image_button = nullptr;
     QPushButton* m_task_status_server_button = nullptr;
     QLabel* m_task_status_server_port_label = nullptr;
     QLineEdit* m_task_status_server_port_line_edit = nullptr;
-    QGroupBox* m_transform_group_box = nullptr;
     QPushButton* m_save_transform_button = nullptr;
     QPushButton* m_load_transform_button = nullptr;
     QLabel* m_bbox_label = nullptr;
@@ -150,4 +174,5 @@ private:
     QLineEdit* m_pixelization_threshold_line_edit = nullptr;
     QLabel* m_result_label = nullptr;
     QLabel* m_status_label = nullptr;
+    QProgressBar* m_task_progress_bar = nullptr;
 };

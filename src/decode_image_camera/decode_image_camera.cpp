@@ -22,28 +22,28 @@ void show_image_worker(std::atomic<bool>& running, ThreadSafeQueue<cv::Mat>& sho
     }
 }
 
-void start(const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, const std::string& image_dir_path, int mp, const Transform& transform, const Calibration& calibration) {
+void start(const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, int mp, const Transform& transform, const Calibration& calibration) {
     auto pixel_image_codec_worker = create_pixel_image_codec_worker(pixel_type);
     auto pixel_image_codec_worker_ptr = pixel_image_codec_worker.get();
     ThreadSafeQueue<std::pair<uint64_t, cv::Mat>> frame_q(20);
     ThreadSafeQueue<cv::Mat> show_image_q(5);
     ThreadSafeQueue<DecodeResult> part_q(20);
     std::atomic<bool> running = true;
-    std::thread fetch_image_thread(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(frame_q));
+    std::thread fetch_image_thread(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(frame_q), 50);
     auto get_transform_fn = [transform] {
         return transform;
     };
-    auto send_result_cb = [&show_image_q](const cv::Mat& img, bool success, const std::vector<std::vector<cv::Mat>>& result_imgs) {
-        show_image_q.Push(img);
-    };
-    std::thread decode_result_thread(&PixelImageCodecWorker::DecodeResultWorker, pixel_image_codec_worker_ptr, std::ref(frame_q), dim, get_transform_fn, calibration, send_result_cb, 500);
-    std::thread show_image_thread(show_image_worker, std::ref(running), std::ref(show_image_q));
     std::vector<std::thread> decode_image_threads;
     for (int i = 0; i < mp; ++i) {
-        decode_image_threads.emplace_back(&PixelImageCodecWorker::DecodeImageWorker, pixel_image_codec_worker_ptr, std::ref(part_q), std::ref(frame_q), image_dir_path, dim, get_transform_fn, calibration);
+        decode_image_threads.emplace_back(&PixelImageCodecWorker::DecodeImageWorker, pixel_image_codec_worker_ptr, std::ref(part_q), std::ref(frame_q), dim, get_transform_fn, calibration);
     }
-    auto save_part_progress_cb = [](uint32_t done_part_num, uint32_t part_num, uint64_t frame_num, float fps, float done_fps, float bps, int64_t left_seconds){
-        std::cerr << "\r" << done_part_num << "/" << part_num << " parts transferred, " << frame_num << " frames processed, fps=" << std::fixed << std::setprecision(2) << fps << ", done_fps=" << std::fixed << std::setprecision(2) << done_fps << ", bps=" << std::fixed << std::setprecision(0) << bps << ", left_seconds=" << left_seconds;
+    auto send_decode_image_result_cb = [&show_image_q](const cv::Mat& img, bool success, const std::vector<std::vector<cv::Mat>>& result_imgs) {
+        show_image_q.Push(img);
+    };
+    std::thread decode_image_result_thread(&PixelImageCodecWorker::DecodeResultWorker, pixel_image_codec_worker_ptr, std::ref(part_q), std::ref(frame_q), dim, get_transform_fn, calibration, send_decode_image_result_cb, 500);
+    std::thread show_image_thread(show_image_worker, std::ref(running), std::ref(show_image_q));
+    auto save_part_progress_cb = [](const TaskProgress& task_progress){
+        std::cerr << "\r" << task_progress.frame_num << " frames processed, " << task_progress.done_part_num << "/" << task_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << task_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << task_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << task_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << task_progress.left_days << "d" << std::setw(2) << task_progress.left_hours << "h" << std::setw(2) << task_progress.left_minutes << "m" << std::setw(2) << task_progress.left_seconds << "s" << std::setfill(' ');
         std::cerr.flush();
     };
     auto save_part_finish_cb = [] {
@@ -52,7 +52,7 @@ void start(const std::string& output_file, const Dim& dim, PixelType pixel_type,
     auto save_part_complete_cb = [] {
         std::cerr << "transfer done\n";
     };
-    auto save_part_error_cb = [](std::string msg) {
+    auto save_part_error_cb = [](const std::string& msg) {
         std::cerr << msg << "\n";
     };
     std::thread save_part_thread(&PixelImageCodecWorker::SavePartWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(part_q), output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, save_part_error_cb, nullptr);
@@ -60,12 +60,12 @@ void start(const std::string& output_file, const Dim& dim, PixelType pixel_type,
     for (size_t i = 0; i < decode_image_threads.size() + 1; ++i) {
         frame_q.PushNull();
     }
-    decode_result_thread.join();
-    show_image_q.PushNull();
-    show_image_thread.join();
     for (auto& e : decode_image_threads) {
         e.join();
     }
+    decode_image_result_thread.join();
+    show_image_q.PushNull();
+    show_image_thread.join();
     part_q.PushNull();
     save_part_thread.join();
 }
@@ -78,7 +78,6 @@ int main(int argc, char** argv) {
         int pixel_size = 0;
         int space_size = 0;
         uint32_t part_num = 0;
-        std::string image_dir_path;
         int mp = 1;
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
@@ -89,7 +88,6 @@ int main(int argc, char** argv) {
         desc_handler("pixel_size", boost::program_options::value<int>(&pixel_size), "pixel size");
         desc_handler("space_size", boost::program_options::value<int>(&space_size), "space size");
         desc_handler("part_num", boost::program_options::value<uint32_t>(&part_num), "part num");
-        desc_handler("image_dir_path", boost::program_options::value<std::string>(&image_dir_path), "image dir path");
         desc_handler("mp", boost::program_options::value<int>(&mp), "multiprocessing");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
@@ -137,7 +135,7 @@ int main(int argc, char** argv) {
         Transform transform = get_transform(vm);
         Calibration calibration;
 
-        start(output_file, dim, pixel_type, pixel_size, space_size, part_num, image_dir_path, mp, transform, calibration);
+        start(output_file, dim, pixel_type, pixel_size, space_size, part_num, mp, transform, calibration);
     }
     catch (std::exception& e) {
         std::cerr << e.what() << "\n";

@@ -17,6 +17,7 @@ public:
     IMAGE_CODEC_API void Stop();
     IMAGE_CODEC_API void UpdateTaskStatus(const Bytes& task_status_bytes);
     IMAGE_CODEC_API bool IsRunning() const { return m_running; }
+    IMAGE_CODEC_API bool NeedUpdateTaskStatus() { return m_need_update_task_status; }
 
 private:
     void Worker();
@@ -25,7 +26,7 @@ private:
 
     std::thread m_thread;
     std::atomic<bool> m_running = false;
-
+    std::atomic<bool> m_need_update_task_status = false;
     Bytes m_task_status_bytes;
     std::mutex m_mtx;
 };

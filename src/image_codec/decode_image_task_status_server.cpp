@@ -54,6 +54,7 @@ void TaskStatusServer::Stop() {
 void TaskStatusServer::Start(int port) {
     m_port = port;
     m_running = true;
+    m_need_update_task_status = true;
     m_thread = std::thread(&TaskStatusServer::Worker, this);
 }
 
@@ -92,4 +93,5 @@ void TaskStatusServer::Worker() {
 void TaskStatusServer::UpdateTaskStatus(const Bytes& task_status_bytes) {
     std::lock_guard<std::mutex> lock(m_mtx);
     m_task_status_bytes = task_status_bytes;
+    m_need_update_task_status = false;
 }
