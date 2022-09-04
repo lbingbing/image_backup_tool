@@ -18,7 +18,7 @@ class Parameters:
         self.pixel_size_range = (1, 100)
         self.space_size_range = (1, 10)
         self.calibration_pixel_size_range = (1, 10)
-        self.interval_range = (1, 5000)
+        self.interval_range = (1, 1000)
 
 class State(enum.Enum):
     CONFIG = 0
@@ -201,7 +201,7 @@ class TaskPage(QtWidgets.QWidget):
         self.cur_undone_part_id_index = None
         self.cur_part_id = None
         self.display_mode = DisplayMode.MANUAL
-        self.interval = 200
+        self.interval = 50
 
         self.timer = QtCore.QTimer(self)
 
@@ -471,7 +471,7 @@ class TaskPage(QtWidgets.QWidget):
                 else:
                     self.part_num = part_num
                     self.cur_part_id = 0
-                    self.undone_part_id_num_label.setText('-')
+                    self.undone_part_id_num_label.setText(str(self.part_num))
                 if self.task_status_server_on:
                     m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
                     ip = m.group(1)

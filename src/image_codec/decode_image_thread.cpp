@@ -120,7 +120,7 @@ void PixelImageCodecWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& p
     }
 }
 
-void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb progress_cb, SavePartFinishCb finish_cb, SavePartCompleteCb complete_cb, SavePartErrorCb error_cb, TaskStatusServer* task_status_server) {
+void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
     PixelType pixel_type = GetPixelImageCodec().GetPixelCodec().GetPixelType();
     Task task(output_file);
     if (std::filesystem::is_regular_file(task.TaskPath())) {
@@ -140,7 +140,7 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
             oss << "pixel_size=" << pixel_size << "\n";
             oss << "space_size=" << space_size << "\n";
             oss << "part_num=" << part_num << "\n";
-            error_cb(oss.str());
+            if (error_cb) error_cb(oss.str());
             running = false;
             while (part_q.Pop());
             return;
@@ -148,6 +148,7 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
     } else {
         task.Init(dim, pixel_type, pixel_size, space_size, part_num);
     }
+    task.SetFinalizationCb(finalization_start_cb, finalization_progress_cb, finalization_complete_cb);
     auto t0 = std::chrono::high_resolution_clock::now();
     uint64_t frame_num = 0;
     float fps = 0;
@@ -195,20 +196,24 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
             }
         }
         if ((frame_num & 0xf) == 0) {
-            progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
+            if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
         }
         if (task_status_server && (task_status_server->NeedUpdateTaskStatus() || (task_status_server->IsRunning() && (frame_num & 0xff) == 0))) {
             task_status_server->UpdateTaskStatus(task.GetTaskStatusBytes());
         }
         if (task.IsDone()) {
-            progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
-            complete_cb();
+            if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
+            task.Finalize();
+            if (save_part_complete_cb) save_part_complete_cb();
             running = false;
             while (part_q.Pop());
             break;
         }
     }
-    finish_cb();
+    if (!task.IsDone()) {
+        task.Flush();
+    }
+    if (save_part_finish_cb) save_part_finish_cb();
 }
 
 std::unique_ptr<PixelImageCodecWorker> create_pixel_image_codec_worker(PixelType pixel_type) {

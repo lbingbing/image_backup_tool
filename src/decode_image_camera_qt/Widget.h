@@ -7,6 +7,7 @@
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
 #include <QtWidgets/QProgressBar>
+#include <QtWidgets/QProgressDialog>
 #include <QThread>
 
 #include "image_codec.h"
@@ -16,18 +17,18 @@ class CalibrateThread : public QThread
     Q_OBJECT
 
 public:
-    CalibrateThread(QObject* parent, std::function<void(CalibrateCb, SendCalibrationImageResultCb, CalibrationProgressCb)> worker_fn);
+    CalibrateThread(QObject* parent, std::function<void(PixelImageCodecWorker::CalibrateCb, PixelImageCodecWorker::SendCalibrationImageResultCb, PixelImageCodecWorker::CalibrationProgressCb)> worker_fn);
 
 signals:
     void SendCalibration(Calibration);
     void SendCalibrationImageResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
-    void SendCalibrationProgress(CalibrationProgress calibration_progress);
+    void SendCalibrationProgress(PixelImageCodecWorker::CalibrationProgress calibration_progress);
 
 protected:
     void run() override;
 
 private:
-    std::function<void(CalibrateCb, SendCalibrationImageResultCb, CalibrationProgressCb)> m_worker_fn;
+    std::function<void(PixelImageCodecWorker::CalibrateCb, PixelImageCodecWorker::SendCalibrationImageResultCb, PixelImageCodecWorker::CalibrationProgressCb)> m_worker_fn;
 };
 
 class DecodeImageResultThread : public QThread
@@ -35,7 +36,7 @@ class DecodeImageResultThread : public QThread
     Q_OBJECT
 
 public:
-    DecodeImageResultThread(QObject* parent, std::function<void(SendDecodeImageResultCb)> worker_fn);
+    DecodeImageResultThread(QObject* parent, std::function<void(PixelImageCodecWorker::SendDecodeImageResultCb)> worker_fn);
 
 signals:
     void SendDecodeImageResult(cv::Mat, bool, std::vector<std::vector<cv::Mat>>);
@@ -44,7 +45,7 @@ protected:
     void run() override;
 
 private:
-    std::function<void(SendDecodeImageResultCb)> m_worker_fn;
+    std::function<void(PixelImageCodecWorker::SendDecodeImageResultCb)> m_worker_fn;
 };
 
 class AutoTransformThread : public QThread
@@ -52,7 +53,7 @@ class AutoTransformThread : public QThread
     Q_OBJECT
 
 public:
-    AutoTransformThread(QObject* parent, std::function<void(SendAutoTransformCb)> worker_fn);
+    AutoTransformThread(QObject* parent, std::function<void(PixelImageCodecWorker::SendAutoTransformCb)> worker_fn);
 
 signals:
     void SendAutoTransform(Transform transform);
@@ -61,7 +62,7 @@ protected:
     void run() override;
 
 private:
-    std::function<void(SendAutoTransformCb)> m_worker_fn;
+    std::function<void(PixelImageCodecWorker::SendAutoTransformCb)> m_worker_fn;
 };
 
 class SavePartThread : public QThread
@@ -69,18 +70,20 @@ class SavePartThread : public QThread
     Q_OBJECT
 
 public:
-    SavePartThread(QObject* parent, std::function<void(SavePartProgressCb, SavePartCompleteCb, SavePartErrorCb)> worker_fn);
+    SavePartThread(QObject* parent, std::function<void(PixelImageCodecWorker::SavePartProgressCb, PixelImageCodecWorker::SavePartCompleteCb, PixelImageCodecWorker::SavePartErrorCb, Task::FinalizationStartCb, Task::FinalizationProgressCb)> worker_fn);
 
 signals:
-    void SendTaskProgress(TaskProgress task_progress);
-    void SendTaskComplete();
-    void SendTaskError(std::string msg);
+    void SendSavePartProgress(PixelImageCodecWorker::SavePartProgress save_part_progress);
+    void SendSavePartComplete();
+    void SendSavePartError(std::string msg);
+    void SendFinalizationStart(Task::FinalizationProgress finalization_progress);
+    void SendFinalizationProgress(Task::FinalizationProgress finalization_progress);
 
 protected:
     void run() override;
 
 private:
-    std::function<void(SavePartProgressCb, SavePartCompleteCb, SavePartErrorCb)> m_worker_fn;
+    std::function<void(PixelImageCodecWorker::SavePartProgressCb, PixelImageCodecWorker::SavePartCompleteCb, PixelImageCodecWorker::SavePartErrorCb, Task::FinalizationStartCb, Task::FinalizationProgressCb)> m_worker_fn;
 };
 
 class Widget : public QWidget
@@ -98,8 +101,8 @@ private slots:
     void ToggleTaskStartStop();
     void ReceiveCalibration(Calibration calibration);
     void ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs);
-    void ShowCalibrationProgress(CalibrationProgress calibration_progress);
-    void ShowTaskProgress(TaskProgress task_progress);
+    void ShowCalibrationProgress(PixelImageCodecWorker::CalibrationProgress calibration_progress);
+    void ShowTaskSavePartProgress(PixelImageCodecWorker::SavePartProgress task_progress);
     void ToggleMonitor();
     void SaveImage();
     void ToggleTaskStatusServer();
@@ -107,7 +110,9 @@ private slots:
     void LoadTransform();
     void TransformChanged();
     void UpdateAutoTransform(Transform transform);
-    void TaskComplete();
+    void TaskSavePartComplete();
+    void TaskFinalizationStart(Task::FinalizationProgress finalization_progress);
+    void TaskFinalizationProgress(Task::FinalizationProgress finalization_progress);
     void ErrorMsg(std::string msg);
     void closeEvent(QCloseEvent* event) override;
 
@@ -174,5 +179,6 @@ private:
     QLineEdit* m_pixelization_threshold_line_edit = nullptr;
     QLabel* m_result_label = nullptr;
     QLabel* m_status_label = nullptr;
-    QProgressBar* m_task_progress_bar = nullptr;
+    QProgressBar* m_task_save_part_progress_bar = nullptr;
+    QProgressDialog* m_task_finalization_progress_dialog = nullptr;
 };

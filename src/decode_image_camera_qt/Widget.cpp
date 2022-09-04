@@ -10,7 +10,7 @@
 
 #include "Widget.h"
 
-CalibrateThread::CalibrateThread(QObject* parent, std::function<void(CalibrateCb, SendCalibrationImageResultCb, CalibrationProgressCb)> worker_fn) : m_worker_fn(worker_fn) {
+CalibrateThread::CalibrateThread(QObject* parent, std::function<void(PixelImageCodecWorker::CalibrateCb, PixelImageCodecWorker::SendCalibrationImageResultCb, PixelImageCodecWorker::CalibrationProgressCb)> worker_fn) : m_worker_fn(worker_fn) {
 }
 
 void CalibrateThread::run() {
@@ -20,13 +20,13 @@ void CalibrateThread::run() {
     auto send_calibration_image_result_cb = [this](const cv::Mat& img, bool success, const std::vector<std::vector<cv::Mat>>& result_imgs) {
         emit SendCalibrationImageResult(img.clone(), success, result_imgs);
     };
-    auto send_calibrate_progress_cb = [this](const CalibrationProgress& calibration_progress) {
+    auto send_calibrate_progress_cb = [this](const PixelImageCodecWorker::CalibrationProgress& calibration_progress) {
         emit SendCalibrationProgress(calibration_progress);
     };
     m_worker_fn(send_calibrate_cb, send_calibration_image_result_cb, send_calibrate_progress_cb);
 }
 
-DecodeImageResultThread::DecodeImageResultThread(QObject* parent, std::function<void(SendDecodeImageResultCb)> worker_fn) : m_worker_fn(worker_fn) {
+DecodeImageResultThread::DecodeImageResultThread(QObject* parent, std::function<void(PixelImageCodecWorker::SendDecodeImageResultCb)> worker_fn) : m_worker_fn(worker_fn) {
 }
 
 void DecodeImageResultThread::run() {
@@ -36,7 +36,7 @@ void DecodeImageResultThread::run() {
     m_worker_fn(send_decode_image_result_cb);
 }
 
-AutoTransformThread::AutoTransformThread(QObject* parent, std::function<void(SendAutoTransformCb)> worker_fn) : m_worker_fn(worker_fn) {
+AutoTransformThread::AutoTransformThread(QObject* parent, std::function<void(PixelImageCodecWorker::SendAutoTransformCb)> worker_fn) : m_worker_fn(worker_fn) {
 }
 
 void AutoTransformThread::run() {
@@ -46,20 +46,26 @@ void AutoTransformThread::run() {
     m_worker_fn(cb);
 }
 
-SavePartThread::SavePartThread(QObject* parent, std::function<void(SavePartProgressCb, SavePartCompleteCb, SavePartErrorCb)> worker_fn) : m_worker_fn(worker_fn) {
+SavePartThread::SavePartThread(QObject* parent, std::function<void(PixelImageCodecWorker::SavePartProgressCb, PixelImageCodecWorker::SavePartCompleteCb, PixelImageCodecWorker::SavePartErrorCb, Task::FinalizationStartCb, Task::FinalizationProgressCb)> worker_fn) : m_worker_fn(worker_fn) {
 }
 
 void SavePartThread::run() {
-    auto save_part_progress_cb = [this](const TaskProgress& task_progress) {
-        emit SendTaskProgress(task_progress);
+    auto save_part_progress_cb = [this](const PixelImageCodecWorker::SavePartProgress& save_part_progress) {
+        emit SendSavePartProgress(save_part_progress);
     };
     auto save_part_complete_cb = [this] {
-        emit SendTaskComplete();
+        emit SendSavePartComplete();
     };
     auto save_part_error_cb = [this](const std::string& msg) {
-        emit SendTaskError(msg);
+        emit SendSavePartError(msg);
     };
-    m_worker_fn(save_part_progress_cb, save_part_complete_cb, save_part_error_cb);
+    auto finalization_start_cb = [this](const Task::FinalizationProgress& finalization_progress) {
+        emit SendFinalizationStart(finalization_progress);
+    };
+    auto finalization_progress_cb = [this](const Task::FinalizationProgress& finalization_progress) {
+        emit SendFinalizationProgress(finalization_progress);
+    };
+    m_worker_fn(save_part_progress_cb, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb);
 }
 
 Widget::Widget(QWidget* parent, const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, int mp)
@@ -279,12 +285,12 @@ Widget::Widget(QWidget* parent, const std::string& output_file, const Dim& dim, 
     m_status_label = new QLabel("-");
     status_frame_layout->addWidget(m_status_label);
 
-    m_task_progress_bar = new QProgressBar();
-    m_task_progress_bar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_progress_bar->setFixedWidth(500);
-    m_task_progress_bar->setFormat("%p%");
-    m_task_progress_bar->setRange(0, m_part_num);
-    status_group_box_layout->addWidget(m_task_progress_bar);
+    m_task_save_part_progress_bar = new QProgressBar();
+    m_task_save_part_progress_bar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    m_task_save_part_progress_bar->setFixedWidth(500);
+    m_task_save_part_progress_bar->setFormat("%p%");
+    m_task_save_part_progress_bar->setRange(0, m_part_num);
+    status_group_box_layout->addWidget(m_task_save_part_progress_bar);
 
     resize(1200, 600);
 }
@@ -302,7 +308,7 @@ void Widget::StartCalibration() {
         return m_transform;
     };
     m_fetch_image_thread = std::make_unique<std::thread>(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker, std::ref(m_calibration_running), std::ref(m_frame_q), 200);
-    auto calibrate_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](CalibrateCb calibrate_cb, SendCalibrationImageResultCb send_calibration_image_result_cb, CalibrationProgressCb calibration_progress_cb) {
+    auto calibrate_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](PixelImageCodecWorker::CalibrateCb calibrate_cb, PixelImageCodecWorker::SendCalibrationImageResultCb send_calibration_image_result_cb, PixelImageCodecWorker::CalibrationProgressCb calibration_progress_cb) {
         pixel_image_codec_worker->CalibrateWorker(m_frame_q, m_dim, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb);
     };
     m_calibrate_thread = std::make_unique<CalibrateThread>(this, calibrate_worker_fn);
@@ -365,29 +371,31 @@ void Widget::StartTask() {
         std::lock_guard<std::mutex> lock(m_transform_mtx);
         return m_transform;
     };
-    m_fetch_image_thread = std::make_unique<std::thread>(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker, std::ref(m_task_running), std::ref(m_frame_q), 50);
+    m_fetch_image_thread = std::make_unique<std::thread>(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker, std::ref(m_task_running), std::ref(m_frame_q), 25);
     for (int i = 0; i < m_mp; ++i) {
         m_decode_image_threads.emplace_back(&PixelImageCodecWorker::DecodeImageWorker, pixel_image_codec_worker, std::ref(m_part_q), std::ref(m_frame_q), m_dim, get_transform_fn, m_calibration);
     }
-    auto decode_image_result_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](SendDecodeImageResultCb send_decode_image_result_cb) {
+    auto decode_image_result_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](PixelImageCodecWorker::SendDecodeImageResultCb send_decode_image_result_cb) {
         pixel_image_codec_worker->DecodeResultWorker(m_part_q, m_frame_q, m_dim, get_transform_fn, m_calibration, send_decode_image_result_cb, 300);
     };
     m_decode_image_result_thread = std::make_unique<DecodeImageResultThread>(this, decode_image_result_worker_fn);
     connect(m_decode_image_result_thread.get(), &DecodeImageResultThread::SendDecodeImageResult, this, &Widget::ShowResult);
     m_decode_image_result_thread->start();
-    auto auto_transform_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](SendAutoTransformCb send_auto_transform_cb) {
+    auto auto_transform_worker_fn = [this, pixel_image_codec_worker, get_transform_fn](PixelImageCodecWorker::SendAutoTransformCb send_auto_transform_cb) {
         pixel_image_codec_worker->AutoTransformWorker(m_part_q, m_frame_q, m_dim, get_transform_fn, m_calibration, send_auto_transform_cb, 300);
     };
     m_auto_transform_thread = std::make_unique<AutoTransformThread>(this, auto_transform_worker_fn);
     connect(m_auto_transform_thread.get(), &AutoTransformThread::SendAutoTransform, this, &Widget::UpdateAutoTransform);
     m_auto_transform_thread->start();
-    auto save_part_worker_fn = [this, pixel_image_codec_worker](SavePartProgressCb save_part_progress_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb save_part_error_cb) {
-        pixel_image_codec_worker->SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_pixel_size, m_space_size, m_part_num, save_part_progress_cb, [] {}, save_part_complete_cb, save_part_error_cb, &m_task_status_server);
+    auto save_part_worker_fn = [this, pixel_image_codec_worker](PixelImageCodecWorker::SavePartProgressCb save_part_progress_cb, PixelImageCodecWorker::SavePartCompleteCb save_part_complete_cb, PixelImageCodecWorker::SavePartErrorCb save_part_error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb) {
+        pixel_image_codec_worker->SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_pixel_size, m_space_size, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
     };
     m_save_part_thread = std::make_unique<SavePartThread>(this, save_part_worker_fn);
-    connect(m_save_part_thread.get(), &SavePartThread::SendTaskProgress, this, &Widget::ShowTaskProgress);
-    connect(m_save_part_thread.get(), &SavePartThread::SendTaskComplete, this, &Widget::TaskComplete);
-    connect(m_save_part_thread.get(), &SavePartThread::SendTaskError, this, &Widget::ErrorMsg);
+    connect(m_save_part_thread.get(), &SavePartThread::SendSavePartProgress, this, &Widget::ShowTaskSavePartProgress);
+    connect(m_save_part_thread.get(), &SavePartThread::SendSavePartComplete, this, &Widget::TaskSavePartComplete);
+    connect(m_save_part_thread.get(), &SavePartThread::SendSavePartError, this, &Widget::ErrorMsg);
+    connect(m_save_part_thread.get(), &SavePartThread::SendFinalizationStart, this, &Widget::TaskFinalizationStart);
+    connect(m_save_part_thread.get(), &SavePartThread::SendFinalizationProgress, this, &Widget::TaskFinalizationProgress);
     m_save_part_thread->start();
 }
 
@@ -436,7 +444,7 @@ void Widget::ClearStatus() {
     ClearImages();
     m_result_label->setText("-");
     m_status_label->setText("-");
-    m_task_progress_bar->setValue(0);
+    m_task_save_part_progress_bar->setValue(0);
 }
 
 void Widget::ClearImages() {
@@ -540,7 +548,7 @@ void Widget::ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::M
     }
 };
 
-void Widget::ShowCalibrationProgress(CalibrationProgress calibration_progress) {
+void Widget::ShowCalibrationProgress(PixelImageCodecWorker::CalibrationProgress calibration_progress) {
     if (m_calibration_running) {
         std::ostringstream oss;
         oss << calibration_progress.frame_num << " frames processed, fps=" << std::fixed << std::setprecision(2) << calibration_progress.fps;
@@ -548,12 +556,12 @@ void Widget::ShowCalibrationProgress(CalibrationProgress calibration_progress) {
     }
 }
 
-void Widget::ShowTaskProgress(TaskProgress task_progress) {
+void Widget::ShowTaskSavePartProgress(PixelImageCodecWorker::SavePartProgress task_save_part_progress) {
     if (m_task_running) {
         std::ostringstream oss;
-        oss << task_progress.frame_num << " frames processed, " << task_progress.done_part_num << "/" << task_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << task_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << task_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << task_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << task_progress.left_days << "d" << std::setw(2) << task_progress.left_hours << "h" << std::setw(2) << task_progress.left_minutes << "m" << std::setw(2) << task_progress.left_seconds << "s" << std::setfill(' ');
+        oss << task_save_part_progress.frame_num << " frames processed, " << task_save_part_progress.done_part_num << "/" << task_save_part_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << task_save_part_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << task_save_part_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << task_save_part_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << task_save_part_progress.left_days << "d" << std::setw(2) << task_save_part_progress.left_hours << "h" << std::setw(2) << task_save_part_progress.left_minutes << "m" << std::setw(2) << task_save_part_progress.left_seconds << "s" << std::setfill(' ');
         m_status_label->setText(oss.str().c_str());
-        m_task_progress_bar->setValue(task_progress.done_part_num);
+        m_task_save_part_progress_bar->setValue(task_save_part_progress.done_part_num);
     }
 }
 
@@ -576,11 +584,22 @@ void Widget::UpdateAutoTransform(Transform transform) {
     UpdateTransformUI(transform);
 }
 
-void Widget::TaskComplete() {
+void Widget::TaskSavePartComplete() {
     StopTask();
     m_task_button->setChecked(false);
     QMessageBox::information(this, "Info", "transfer done", QMessageBox::Ok, QMessageBox::Ok);
     //close();
+}
+
+void Widget::TaskFinalizationStart(Task::FinalizationProgress finalization_progress) {
+    m_task_finalization_progress_dialog = new QProgressDialog("finalizing task", QString(), finalization_progress.done_block_num, finalization_progress.block_num, this);
+    m_task_finalization_progress_dialog->setMinimumDuration(0);
+    m_task_finalization_progress_dialog->setWindowModality(Qt::WindowModal);
+
+}
+
+void Widget::TaskFinalizationProgress(Task::FinalizationProgress finalization_progress) {
+    m_task_finalization_progress_dialog->setValue(finalization_progress.done_block_num);
 }
 
 void Widget::ErrorMsg(std::string msg) {

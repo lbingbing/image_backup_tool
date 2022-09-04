@@ -29,7 +29,7 @@ void start(const std::string& output_file, const Dim& dim, PixelType pixel_type,
     ThreadSafeQueue<cv::Mat> show_image_q(5);
     ThreadSafeQueue<DecodeResult> part_q(20);
     std::atomic<bool> running = true;
-    std::thread fetch_image_thread(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(frame_q), 50);
+    std::thread fetch_image_thread(&PixelImageCodecWorker::FetchImageWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(frame_q), 20);
     auto get_transform_fn = [transform] {
         return transform;
     };
@@ -42,20 +42,27 @@ void start(const std::string& output_file, const Dim& dim, PixelType pixel_type,
     };
     std::thread decode_image_result_thread(&PixelImageCodecWorker::DecodeResultWorker, pixel_image_codec_worker_ptr, std::ref(part_q), std::ref(frame_q), dim, get_transform_fn, calibration, send_decode_image_result_cb, 500);
     std::thread show_image_thread(show_image_worker, std::ref(running), std::ref(show_image_q));
-    auto save_part_progress_cb = [](const TaskProgress& task_progress){
-        std::cerr << "\r" << task_progress.frame_num << " frames processed, " << task_progress.done_part_num << "/" << task_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << task_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << task_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << task_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << task_progress.left_days << "d" << std::setw(2) << task_progress.left_hours << "h" << std::setw(2) << task_progress.left_minutes << "m" << std::setw(2) << task_progress.left_seconds << "s" << std::setfill(' ');
+    auto save_part_progress_cb = [](const PixelImageCodecWorker::SavePartProgress& task_save_part_progress){
+        std::cerr << "\r" << task_save_part_progress.frame_num << " frames processed, " << task_save_part_progress.done_part_num << "/" << task_save_part_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << task_save_part_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << task_save_part_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << task_save_part_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << task_save_part_progress.left_days << "d" << std::setw(2) << task_save_part_progress.left_hours << "h" << std::setw(2) << task_save_part_progress.left_minutes << "m" << std::setw(2) << task_save_part_progress.left_seconds << "s" << std::setfill(' ');
         std::cerr.flush();
     };
-    auto save_part_finish_cb = [] {
+    auto save_part_finish_cb = []() {
         std::cerr << "\n";
-    };
-    auto save_part_complete_cb = [] {
-        std::cerr << "transfer done\n";
     };
     auto save_part_error_cb = [](const std::string& msg) {
         std::cerr << msg << "\n";
     };
-    std::thread save_part_thread(&PixelImageCodecWorker::SavePartWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(part_q), output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, save_part_error_cb, nullptr);
+    auto finalization_start_cb = [](const Task::FinalizationProgress& finalization_progress) {
+        std::cerr << "\n";
+    };
+    auto finalization_progress_cb = [](const Task::FinalizationProgress& finalization_progress){
+        std::cerr << "\r" << finalization_progress.done_block_num << "/" << finalization_progress.block_num << " block processed";
+        std::cerr.flush();
+    };
+    auto finalization_complete_cb = [] {
+        std::cerr << "\ntransfer done";
+    };
+    std::thread save_part_thread(&PixelImageCodecWorker::SavePartWorker, pixel_image_codec_worker_ptr, std::ref(running), std::ref(part_q), output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, nullptr, save_part_error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, nullptr);
     fetch_image_thread.join();
     for (size_t i = 0; i < decode_image_threads.size() + 1; ++i) {
         frame_q.PushNull();

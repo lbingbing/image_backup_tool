@@ -10,11 +10,6 @@ class Task:
         self.blob_path = path + '.blob'
         self.blob_buf = []
 
-    def close(self):
-        self.flush()
-        if self.is_done():
-            sel.finalize()
-
     def init(self, dim, pixel_type, pixel_size, space_size, part_num):
         self.dim = dim
         self.pixel_type = pixel_type
@@ -68,6 +63,7 @@ class Task:
         return self.done_part_num == self.part_num
 
     def finalize(self):
+        self.flush()
         with open(self.blob_path, 'r+b') as blob_file:
             blob_file.seek(0, io.SEEK_SET)
             file_size_bytes = blob_file.read(8)
