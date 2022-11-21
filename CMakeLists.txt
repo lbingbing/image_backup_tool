@@ -50,6 +50,7 @@ function(add_exe dir name)
     install(TARGETS ${name} DESTINATION bin)
 endfunction()
 
+add_subdirectory(python)
 add_subdirectory(src/color_calibration)
 add_subdirectory(src/decode_image_camera)
 add_subdirectory(src/decode_image_camera_qt)

@@ -446,12 +446,7 @@ class TaskPage(QtWidgets.QWidget):
 
     def toggle_task_start_stop(self):
         if self.context.state == State.CONFIG:
-            if self.context.pixel_type == pixel_codec.PixelType.PIXEL2:
-                self.pixel_codec = pixel_codec.Pixel2Codec()
-            elif self.context.pixel_type == pixel_codec.PixelType.PIXEL4:
-                self.pixel_codec = pixel_codec.Pixel4Codec()
-            elif self.context.pixel_type == pixel_codec.PixelType.PIXEL8:
-                self.pixel_codec = pixel_codec.Pixel8Codec()
+            self.pixel_codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
             self.part_byte_num = self.context.tile_x_num * self.context.tile_y_num * self.context.tile_x_size * self.context.tile_y_size * self.pixel_codec.bit_num_per_pixel // 8 - self.pixel_codec.meta_byte_num
             if self.validate_config():
                 self.context.state = State.DISPLAY
@@ -544,7 +539,6 @@ class TaskPage(QtWidgets.QWidget):
 
     def draw(self, part_id):
         part_bytes = bytes(self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num])
-        part_bytes = pixel_codec.encrypt_part_bytes(part_bytes)
         pixels = self.pixel_codec.encode(part_id, part_bytes, self.context.tile_x_num * self.context.tile_y_num * self.context.tile_x_size * self.context.tile_y_size)
         data = [[[[pixels[((tile_y_id * self.context.tile_x_num + tile_x_id) * self.context.tile_y_size + y) * self.context.tile_x_size + x]
             for x in range(self.context.tile_x_size)]

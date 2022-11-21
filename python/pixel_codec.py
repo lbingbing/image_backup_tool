@@ -27,11 +27,14 @@ def parse_pixel_type(pixel_type_str):
     else:
         assert 0, "invalid pixel type '{}'".format(pixel_type_str)
 
-def encrypt_part_bytes(part_bytes):
-    part_bytes = bytearray(reversed(part_bytes))
-    for i in range(len(part_bytes)):
-        part_bytes[i] ^= 170
-    return part_bytes
+def encrypt_bytes(bytes1):
+    bytes1 = bytearray(reversed(bytes1))
+    for i in range(len(bytes1)):
+        bytes1[i] ^= 170
+    return bytes1
+
+def scramble_part_id_bytes(part_id_bytes, crc_bytes):
+    return bytes(b1 ^ b2 for b1, b2 in zip(part_id_bytes, crc_bytes))
 
 class PixelCodec:
     crc_byte_num = 4
@@ -50,28 +53,29 @@ class PixelCodec:
     def encode(self, part_id, part_bytes, pixel_num):
         assert pixel_num >= ((self.meta_byte_num + len(part_bytes)) * 8 + self.bit_num_per_pixel - 1) // self.bit_num_per_pixel
         part_id_bytes = struct.pack('<I', part_id)
-        padded_part_bytes = part_bytes +  bytes([0] * (pixel_num * self.bit_num_per_pixel // 8 - self.meta_byte_num - len(part_bytes)))
+        padded_part_bytes = part_bytes + bytes([0] * (pixel_num * self.bit_num_per_pixel // 8 - self.meta_byte_num - len(part_bytes)))
         bytes_for_crc = part_id_bytes + padded_part_bytes
         crc = zlib.crc32(bytes_for_crc)
         crc_bytes = struct.pack('<I', crc)
-        bytes1 = crc_bytes + part_id_bytes + padded_part_bytes
-        pixels = self.bytes_to_pixels(bytes1)
+        scrambled_part_id_bytes = scramble_part_id_bytes(part_id_bytes, crc_bytes)
+        pixels = self.bytes_to_pixels(encrypt_bytes(crc_bytes + scrambled_part_id_bytes + padded_part_bytes))
         pixels += [0] * (pixel_num - len(pixels))
         return pixels
 
     def decode(self, pixels):
         assert len(pixels) >= ((self.meta_byte_num + 1) * 8 + self.bit_num_per_pixel - 1) // self.bit_num_per_pixel
         truncated_pixels = pixels[:(len(pixels) * self.bit_num_per_pixel // 8 * 8 + self.bit_num_per_pixel - 1) // self.bit_num_per_pixel]
-        bytes1 = self.pixels_to_bytes(truncated_pixels)
+        bytes1 = encrypt_bytes(self.pixels_to_bytes(truncated_pixels))
         crc_bytes = bytes1[:self.crc_byte_num]
         crc = struct.unpack('<I', crc_bytes)[0]
-        part_id_bytes = bytes1[self.crc_byte_num:self.meta_byte_num]
+        scrambled_part_id_bytes = bytes1[self.crc_byte_num:self.meta_byte_num]
+        part_id_bytes = scramble_part_id_bytes(scrambled_part_id_bytes, crc_bytes)
         part_id = struct.unpack('<I', part_id_bytes)[0]
-        part_bytes = bytes1[self.meta_byte_num:]
-        bytes_for_crc = part_id_bytes + part_bytes
+        padded_part_bytes = bytes1[self.meta_byte_num:]
+        bytes_for_crc = part_id_bytes + padded_part_bytes
         crc_computed = zlib.crc32(bytes_for_crc)
         success = crc_computed == crc
-        return success, part_id, part_bytes
+        return success, part_id, padded_part_bytes
 
 class Pixel2Codec(PixelCodec):
     pixel_value_num = 2

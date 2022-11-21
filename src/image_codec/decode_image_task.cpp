@@ -46,7 +46,7 @@ bool Task::IsPartDone(uint32_t part_id) const {
     return m_task_status_bytes[byte_index] & mask;
 }
 
-void Task::UpdatePart(uint32_t part_id, Bytes part_bytes) {
+void Task::UpdatePart(uint32_t part_id, const Bytes& part_bytes) {
     if (IsPartDone(part_id)) return;
 
     auto byte_index = part_id / 8;
@@ -54,8 +54,7 @@ void Task::UpdatePart(uint32_t part_id, Bytes part_bytes) {
     m_task_status_bytes[byte_index] |= mask;
     m_done_part_num += 1;
 
-    encrypt_part_bytes(part_bytes);
-    m_blob_buf.emplace_back(part_id, std::move(part_bytes));
+    m_blob_buf.emplace_back(part_id, part_bytes);
 
     if ((m_done_part_num & 0x3ff) == 0) {
         Flush();

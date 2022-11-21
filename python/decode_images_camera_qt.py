@@ -200,7 +200,6 @@ def save_part_worker(stop_q, task_result_q, part_q, output_file, row_num, col_nu
                 break
             success, part_id, part_bytes = part
             if success and not task.test_part_done(part_id):
-                part_bytes = bit_codec.encrypt_part_bytes(part_bytes)
                 f.seek(part_id * len(part_bytes), io.SEEK_SET)
                 f.write(part_bytes)
                 task.set_part_done(part_id)

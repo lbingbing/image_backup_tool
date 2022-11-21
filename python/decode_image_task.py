@@ -53,7 +53,6 @@ class Task:
         self.task_status_bytes[byte_index] |= mask
         self.done_part_num += 1
 
-        part_bytes = pixel_codec.encrypt_part_bytes(part_bytes)
         self.blob_buf.append((part_id, part_bytes))
 
         if (self.done_part_num & 0xff) == 0:

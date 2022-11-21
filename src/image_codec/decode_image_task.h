@@ -22,7 +22,7 @@ public:
     IMAGE_CODEC_API void Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num);
     IMAGE_CODEC_API void Load();
     IMAGE_CODEC_API void SetFinalizationCb(FinalizationStartCb finalization_start_cb, FinalizationProgressCb finalization_progress_cb, FinalizationCompleteCb finalization_complete_cb);
-    IMAGE_CODEC_API void UpdatePart(uint32_t part_id, Bytes part_bytes);
+    IMAGE_CODEC_API void UpdatePart(uint32_t part_id, const Bytes& part_bytes);
     IMAGE_CODEC_API void Flush();
     IMAGE_CODEC_API bool IsDone() const;
     IMAGE_CODEC_API void Finalize();

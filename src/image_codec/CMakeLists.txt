@@ -2,6 +2,7 @@ add_library(image_codec SHARED
     base64.cpp
     image_codec_types.cpp
     pixel_codec.cpp
+    pixel_codec_capi.cpp
     transform_utils.cpp
     decode_image.cpp
     decode_image_task.cpp

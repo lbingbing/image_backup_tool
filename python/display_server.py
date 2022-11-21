@@ -40,7 +40,7 @@ class App:
     def get_data(self, query_str):
         m = re.match(r'^part_id=(\d+)$', query_str)
         part_id = int(m.group(1))
-        part_bytes = pixel_codec.encrypt_part_bytes(self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num])
+        part_bytes = self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num]
         bits = pixel_codec.encode(part_id, part_bytes, self.row_num * self.col_num)
         rows = [bits[i*self.col_num:(i+1)*self.col_num] for i in range(self.row_num)]
         return json.dumps(rows).encode(encoding='utf-8')

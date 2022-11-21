@@ -5,14 +5,15 @@
 
 #include "pixel_codec.h"
 
-void encrypt_part_bytes(Bytes& bytes) {
-    std::reverse(bytes.begin(), bytes.end());
-    for (auto& e : bytes) {
-        e ^= Byte(170);
-    }
-}
-
 namespace {
+    Bytes encrypt_bytes(Bytes& bytes) {
+        Bytes encrypted_bytes(bytes.rbegin(), bytes.rend());
+        for (auto& e : encrypted_bytes) {
+            e ^= Byte(170);
+        }
+        return encrypted_bytes;
+    }
+
     Bytes uint32_to_bytes(uint32_t v) {
         return {
             static_cast<Byte>((v >> 0) & 0xff),
@@ -31,6 +32,14 @@ namespace {
         crc_gen.process_bytes(bytes.data(), bytes.size());
         return crc_gen.checksum();
     }
+
+    Bytes scramble_part_id_bytes(const Bytes& part_id_bytes, const Bytes& crc_bytes) {
+        Bytes scrambled_part_id_bytes = part_id_bytes;
+        for (size_t i = 0; i < scrambled_part_id_bytes.size(); ++i) {
+            scrambled_part_id_bytes[i] ^= crc_bytes[i&0x3];
+        }
+        return scrambled_part_id_bytes;
+    }
 }
 
 Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_num) {
@@ -43,11 +52,12 @@ Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_n
     bytes_for_crc.insert(bytes_for_crc.end(), padded_part_bytes.begin(), padded_part_bytes.end());
     uint32_t crc = crc32(bytes_for_crc);
     Bytes crc_bytes = uint32_to_bytes(crc);
+    Bytes scrambled_part_id_bytes = scramble_part_id_bytes(part_id_bytes, crc_bytes);
     Bytes bytes;
     bytes.insert(bytes.end(), crc_bytes.begin(), crc_bytes.end());
-    bytes.insert(bytes.end(), part_id_bytes.begin(), part_id_bytes.end());
+    bytes.insert(bytes.end(), scrambled_part_id_bytes.begin(), scrambled_part_id_bytes.end());
     bytes.insert(bytes.end(), padded_part_bytes.begin(), padded_part_bytes.end());
-    Pixels pixels = BytesToPixels(bytes);
+    Pixels pixels = BytesToPixels(encrypt_bytes(bytes));
     pixels.resize(pixel_num);
     if (0) {
         std::cout << "encode\n";
@@ -68,15 +78,16 @@ Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_n
 DecodeResult PixelCodec::Decode(const Pixels& pixels) {
     if (static_cast<int>(pixels.size()) < ((META_BYTE_NUM + 1) * 8 + BitNumPerPixel() - 1) / BitNumPerPixel()) throw std::invalid_argument("invalid encode arguments");
     Pixels truncated_pixels(pixels.begin(), pixels.begin() + (pixels.size() * BitNumPerPixel() / 8 * 8 + BitNumPerPixel() - 1) / BitNumPerPixel());
-    Bytes bytes = PixelsToBytes(truncated_pixels);
+    Bytes bytes = encrypt_bytes(PixelsToBytes(truncated_pixels));
     Bytes crc_bytes(bytes.begin(), bytes.begin() + CRC_BYTE_NUM);
     uint32_t crc = bytes_to_uint32(crc_bytes);
-    Bytes part_id_bytes(bytes.begin() + CRC_BYTE_NUM, bytes.begin() + META_BYTE_NUM);
+    Bytes scrambled_part_id_bytes(bytes.begin() + CRC_BYTE_NUM, bytes.begin() + META_BYTE_NUM);
+    Bytes part_id_bytes = scramble_part_id_bytes(scrambled_part_id_bytes, crc_bytes);
     uint32_t part_id = bytes_to_uint32(part_id_bytes);
-    Bytes part_bytes(bytes.begin() + META_BYTE_NUM, bytes.end());
+    Bytes padded_part_bytes(bytes.begin() + META_BYTE_NUM, bytes.end());
     Bytes bytes_for_crc;
     bytes_for_crc.insert(bytes_for_crc.end(), part_id_bytes.begin(), part_id_bytes.end());
-    bytes_for_crc.insert(bytes_for_crc.end(), part_bytes.begin(), part_bytes.end());
+    bytes_for_crc.insert(bytes_for_crc.end(), padded_part_bytes.begin(), padded_part_bytes.end());
     uint32_t crc_computed = crc32(bytes_for_crc);
     bool success = crc_computed == crc;
     if (0) {
@@ -88,11 +99,11 @@ DecodeResult PixelCodec::Decode(const Pixels& pixels) {
         std::cout << "crc: " << std::hex << crc << "\n";
         std::cout << "part_id_bytes: " << part_id_bytes << "\n";
         std::cout << "part_id: " << std::hex << part_id << "\n";
-        std::cout << "part_bytes: " << part_bytes << "\n";
+        std::cout << "padded_part_bytes: " << padded_part_bytes << "\n";
         std::cout << "bytes_for_crc: " << bytes_for_crc << "\n";
         std::cout << "crc_computed: " << crc_computed << "\n";
     }
-    return { success, part_id, part_bytes };
+    return {success, part_id, padded_part_bytes};
 }
 
 Pixels Pixel2Codec::BytesToPixels(const Bytes& bytes) {

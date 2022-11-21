@@ -9,8 +9,6 @@
 
 using DecodeResult = std::tuple<bool, uint32_t, Bytes>;
 
-IMAGE_CODEC_API void encrypt_part_bytes(Bytes& bytes);
-
 class PixelCodec {
 public:
     static constexpr int CRC_BYTE_NUM = 4;
