@@ -7,6 +7,8 @@
 #include "decode_image_thread.h"
 #include "image_fetcher.h"
 
+PixelImageCodecWorker::PixelImageCodecWorker(PixelType pixel_type) : m_pixel_image_codec(pixel_type) {}
+
 void PixelImageCodecWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, int interval) {
     while (running) {
         auto image_fetcher = create_image_fetcher();
@@ -31,7 +33,7 @@ void PixelImageCodecWorker::CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, 
         auto data = frame_q.Pop();
         if (!data) break;
         auto& [frame_id, frame] = data.value();
-        auto [frame1, calibration, result_imgs] = GetPixelImageCodec().Calibrate(frame, dim, get_transform_cb(), true);
+        auto [frame1, calibration, result_imgs] = m_pixel_image_codec.Calibrate(frame, dim, get_transform_cb(), true);
         ++frame_num;
         if ((frame_num & 0x1f) == 0) {
             auto t1 = std::chrono::high_resolution_clock::now();
@@ -53,7 +55,7 @@ void PixelImageCodecWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& par
         auto data = frame_q.Pop();
         if (!data) break;
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = GetPixelImageCodec().Decode(frame, dim, get_transform_cb(), calibration, false);
+        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_pixel_image_codec.Decode(frame, dim, get_transform_cb(), calibration, false);
         part_q.Emplace(success, part_id, part_bytes);
     }
 }
@@ -66,7 +68,7 @@ void PixelImageCodecWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& pa
             break;
         }
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = GetPixelImageCodec().Decode(frame, dim, get_transform_cb(), calibration, true);
+        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_pixel_image_codec.Decode(frame, dim, get_transform_cb(), calibration, true);
         part_q.Emplace(success, part_id, part_bytes);
         send_decode_image_result_cb(frame1, success, result_imgs);
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
@@ -92,7 +94,7 @@ void PixelImageCodecWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& p
             transform.pixelization_threshold[0] = cur_pixelization_threshold;
             transform.pixelization_threshold[1] = cur_pixelization_threshold;
             transform.pixelization_threshold[2] = cur_pixelization_threshold;
-            auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = GetPixelImageCodec().Decode(frame, dim, transform, calibration, false);
+            auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_pixel_image_codec.Decode(frame, dim, transform, calibration, false);
             if (!has_succeeded && (success || i == LOOP_NUM - 1)) {
                 part_q.Emplace(success, part_id, part_bytes);
                 has_succeeded = true;
@@ -121,7 +123,7 @@ void PixelImageCodecWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& p
 }
 
 void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
-    PixelType pixel_type = GetPixelImageCodec().GetPixelCodec().GetPixelType();
+    PixelType pixel_type = m_pixel_image_codec.GetPixelCodec().GetPixelType();
     Task task(output_file);
     if (std::filesystem::is_regular_file(task.TaskPath())) {
         task.Load();
@@ -156,7 +158,7 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
     float done_fps = 0;
     uint32_t done_part_num0 = task.DonePartNum();
     float bps = 0;
-    float bpf = static_cast<float>(dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * GetPixelImageCodec().GetPixelCodec().BitNumPerPixel()) / 8.0;
+    float bpf = static_cast<float>(dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * m_pixel_image_codec.GetPixelCodec().BitNumPerPixel()) / 8.0;
     int left_days = 0;
     int left_hours = 0;
     int left_minutes = 0;
@@ -214,18 +216,4 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
         task.Flush();
     }
     if (save_part_finish_cb) save_part_finish_cb();
-}
-
-std::unique_ptr<PixelImageCodecWorker> create_pixel_image_codec_worker(PixelType pixel_type) {
-    std::unique_ptr<PixelImageCodecWorker> pixel_image_codec_worker;
-    if (pixel_type == PixelType::PIXEL2) {
-        pixel_image_codec_worker = std::make_unique<Pixel2ImageCodecWorker>();
-    } else if (pixel_type == PixelType::PIXEL4) {
-        pixel_image_codec_worker = std::make_unique<Pixel4ImageCodecWorker>();
-    } else if (pixel_type == PixelType::PIXEL8) {
-        pixel_image_codec_worker = std::make_unique<Pixel8ImageCodecWorker>();
-    } else {
-        throw std::invalid_argument("invalid pixel type " + std::to_string(static_cast<int>(pixel_type)));
-    }
-    return pixel_image_codec_worker;
 }

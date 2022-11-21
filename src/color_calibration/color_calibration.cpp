@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
         }
 
         auto dim = parse_dim(vm["dim"].as<std::string>());
-        auto pixel_image_codec = create_pixel_image_codec(parse_pixel_type(vm["pixel_type"].as<std::string>()));
+        PixelImageCodec pixel_image_codec(parse_pixel_type(vm["pixel_type"].as<std::string>()));
         Transform transform = get_transform(vm);
         Calibration calibration;
         if (vm.count("calibration_file")) {
@@ -230,11 +230,11 @@ int main(int argc, char** argv) {
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
         if (scan_mode == 0) {
-            decode(pixel_image_codec.get(), img, dim, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
+            decode(&pixel_image_codec, img, dim, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
         } else if (scan_mode == 1) {
-            scan1(pixel_image_codec.get(), img, dim, transform, calibration, scan_bgr_radius);
+            scan1(&pixel_image_codec, img, dim, transform, calibration, scan_bgr_radius);
         } else if (scan_mode == 2) {
-            scan2(pixel_image_codec.get(), img, dim, transform, calibration);
+            scan2(&pixel_image_codec, img, dim, transform, calibration);
         }
     }
     catch (std::exception& e) {

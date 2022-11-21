@@ -362,6 +362,8 @@ cv::Mat get_result_image(const cv::Mat& img, const Dim& dim, const Calibration& 
     return img1;
 }
 
+PixelImageCodec::PixelImageCodec(PixelType pixel_type) : m_pixel_codec(create_pixel_codec(pixel_type)) {}
+
 CalibrateResult PixelImageCodec::Calibrate(const cv::Mat& img, const Dim& dim, const Transform& transform, bool result_image) {
     auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;
     cv::Mat img1 = transform_image(img, transform);
@@ -425,7 +427,7 @@ ImageDecodeResult PixelImageCodec::Decode(const cv::Mat& img, const Dim& dim, co
     std::vector<std::vector<cv::Mat>> result_imgs(tile_y_num);
     for (auto& e : result_imgs) e.resize(tile_x_num);
     if (calibration.valid) {
-        cv::Mat img1_p = do_pixelize(img1, GetPixelCodec().GetPixelType(), transform.pixelization_threshold);
+        cv::Mat img1_p = do_pixelize(img1, m_pixel_codec->GetPixelType(), transform.pixelization_threshold);
         for (int tile_y_id = 0; tile_y_id < tile_y_num; ++tile_y_id) {
             for (int tile_x_id = 0; tile_x_id < tile_x_num; ++tile_x_id) {
                 auto tile_pixels = get_tile_pixels(img1_p, calibration.tiles[tile_y_id][tile_x_id].centers);
@@ -447,7 +449,7 @@ ImageDecodeResult PixelImageCodec::Decode(const cv::Mat& img, const Dim& dim, co
                 std::vector<int> bbox1 = { 0, 0, tile_img1.cols, tile_img1.rows };
                 std::vector<int> bbox2 = get_tile_bbox2(bbox1, tile_x_size, tile_y_size);
                 cv::Mat tile_img2 = do_crop(tile_img1, bbox2);
-                tile_img2 = do_pixelize(tile_img2, GetPixelCodec().GetPixelType(), transform.pixelization_threshold);
+                tile_img2 = do_pixelize(tile_img2, m_pixel_codec->GetPixelType(), transform.pixelization_threshold);
                 Pixels tile_pixels = get_tile_pixels(tile_img2, tile_x_size, tile_y_size);
                 pixels.insert(pixels.end(), tile_pixels.begin(), tile_pixels.end());
                 if (result_image) {
@@ -456,20 +458,6 @@ ImageDecodeResult PixelImageCodec::Decode(const cv::Mat& img, const Dim& dim, co
             }
         }
     }
-    auto [success, part_id, part_bytes] = GetPixelCodec().Decode(pixels);
+    auto [success, part_id, part_bytes] = m_pixel_codec->Decode(pixels);
     return std::make_tuple(success, part_id, std::move(part_bytes), std::move(pixels), std::move(img1), std::move(result_imgs));
-}
-
-std::unique_ptr<PixelImageCodec> create_pixel_image_codec(PixelType pixel_type) {
-    std::unique_ptr<PixelImageCodec> pixel_image_codec;
-    if (pixel_type == PixelType::PIXEL2) {
-        pixel_image_codec = std::make_unique<Pixel2ImageCodec>();
-    } else if (pixel_type == PixelType::PIXEL4) {
-        pixel_image_codec = std::make_unique<Pixel4ImageCodec>();
-    } else if (pixel_type == PixelType::PIXEL8) {
-        pixel_image_codec = std::make_unique<Pixel8ImageCodec>();
-    } else {
-        throw std::invalid_argument("invalid pixel type " + static_cast<int>(pixel_type));
-    }
-    return pixel_image_codec;
 }

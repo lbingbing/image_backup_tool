@@ -41,37 +41,14 @@ public:
     using SavePartCompleteCb = std::function<void()>;
     using SavePartErrorCb = std::function<void(const std::string&)>;
 
-    virtual PixelImageCodec& GetPixelImageCodec() = 0;
+    IMAGE_CODEC_API PixelImageCodecWorker(PixelType pixel_type);
     IMAGE_CODEC_API void FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, int interval);
     IMAGE_CODEC_API void CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, CalibrateCb calibrate_cb, SendCalibrationImageResultCb send_calibration_image_result_cb, CalibrationProgressCb calibration_progress_cb);
     IMAGE_CODEC_API void DecodeImageWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration);
     IMAGE_CODEC_API void DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration, SendDecodeImageResultCb send_decode_image_result_cb, int interval);
     IMAGE_CODEC_API void AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration, SendAutoTransformCb send_auto_trasform_cb, int interval);
     IMAGE_CODEC_API void SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server);
-};
-
-class Pixel2ImageCodecWorker : public PixelImageCodecWorker {
-public:
-    Pixel2ImageCodec& GetPixelImageCodec() override { return m_pixel2_image_codec; }
 
 private:
-    Pixel2ImageCodec m_pixel2_image_codec;
+    PixelImageCodec m_pixel_image_codec;
 };
-
-class Pixel4ImageCodecWorker : public PixelImageCodecWorker {
-public:
-    Pixel4ImageCodec& GetPixelImageCodec() override { return m_pixel4_image_codec; }
-
-private:
-    Pixel4ImageCodec m_pixel4_image_codec;
-};
-
-class Pixel8ImageCodecWorker : public PixelImageCodecWorker {
-public:
-    Pixel8ImageCodec& GetPixelImageCodec() override { return m_pixel8_image_codec; }
-
-private:
-    Pixel8ImageCodec m_pixel8_image_codec;
-};
-
-IMAGE_CODEC_API std::unique_ptr<PixelImageCodecWorker> create_pixel_image_codec_worker(PixelType pixel_type);

@@ -128,7 +128,7 @@ private:
 
     std::string m_output_file;
     Dim m_dim;
-    std::unique_ptr<PixelImageCodecWorker> m_pixel_image_codec_worker;
+    PixelImageCodecWorker m_pixel_image_codec_worker;
     int m_pixel_size = 0;
     int m_space_size = 0;
     uint32_t m_part_num = 0;

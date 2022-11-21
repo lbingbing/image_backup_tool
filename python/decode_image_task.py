@@ -9,6 +9,9 @@ class Task:
         self.task_path = path + '.task'
         self.blob_path = path + '.blob'
         self.blob_buf = []
+        self.finalization_start_cb = None
+        self.finalization_progress_cb = None
+        self.finalization_complete_cb = None
 
     def init(self, dim, pixel_type, pixel_size, space_size, part_num):
         self.dim = dim
@@ -25,6 +28,11 @@ class Task:
         *self.dim, pixel_type, self.pixel_size, self.space_size, self.part_num, self.done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
         self.pixel_type = pixel_codec.PixelType(pixel_type)
         self.task_status_bytes = bytearray(task_bytes[36:])
+
+    def set_finalization_cb(self, finalization_start_cb, finalization_progress_cb, finalization_complete_cb):
+        self.finalization_start_cb = finalization_start_cb
+        self.finalization_progress_cb = finalization_progress_cb
+        self.finalization_complete_cb = finalization_complete_cb
 
     def flush(self):
         mode = 'r+b' if os.path.isfile(self.blob_path) else 'w+b'
@@ -67,8 +75,11 @@ class Task:
             blob_file.seek(0, io.SEEK_SET)
             file_size_bytes = blob_file.read(8)
             file_size = struct.unpack('<Q', file_size_bytes)[0]
-            block_size = 64 * 1024
+            block_size = 1024 * 1024
+            block_num = (file_size + block_size - 1) // block_size
             block_index = 0
+            if self.finalization_start_cb:
+                self.finalization_start_cb(0, block_num)
             while True:
                 offset = block_size * block_index
                 blob_file.seek(8 + offset, io.SEEK_SET)
@@ -78,9 +89,13 @@ class Task:
                 blob_file.seek(offset, io.SEEK_SET)
                 blob_file.write(block)
                 block_index += 1
+                if self.finalization_progress_cb:
+                    self.finalization_progress_cb(block_index, block_num)
             blob_file.truncate(file_size)
         os.rename(self.blob_path, self.path)
         os.remove(self.task_path)
+        if self.finalization_complete_cb:
+            self.finalization_complete_cb()
 
     def print(self, show_undone_part_num):
         print('dim={}'.format(self.dim))

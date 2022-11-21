@@ -44,6 +44,9 @@ class PixelCodec:
     pixel_value_num = None
     bit_num_per_pixel = None
 
+    def get_pixel_type(self):
+        raise NotImplementedError()
+
     def bytes_to_pixels(self, b):
         raise NotImplementedError()
 
@@ -81,6 +84,9 @@ class Pixel2Codec(PixelCodec):
     pixel_value_num = 2
     bit_num_per_pixel = 1
 
+    def get_pixel_type(self):
+        return PixelType.PIXEL2
+
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
         return [int(e) for e in s]
@@ -92,6 +98,9 @@ class Pixel4Codec(PixelCodec):
     pixel_value_num = 4
     bit_num_per_pixel = 2
 
+    def get_pixel_type(self):
+        return PixelType.PIXEL4
+
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
         return [int(s[i:i+2], 2) for i in range(0, len(s), 2)]
@@ -102,6 +111,9 @@ class Pixel4Codec(PixelCodec):
 class Pixel8Codec(PixelCodec):
     pixel_value_num = 8
     bit_num_per_pixel = 3
+
+    def get_pixel_type(self):
+        return PixelType.PIXEL8
 
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
