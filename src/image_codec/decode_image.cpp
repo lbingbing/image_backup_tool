@@ -362,7 +362,8 @@ cv::Mat get_result_image(const cv::Mat& img, const Dim& dim, const Calibration& 
     return img1;
 }
 
-PixelImageCodec::PixelImageCodec(PixelType pixel_type) : m_pixel_codec(create_pixel_codec(pixel_type)) {}
+PixelImageCodec::PixelImageCodec(PixelType pixel_type) : m_pixel_codec(create_pixel_codec(pixel_type)) {
+}
 
 CalibrateResult PixelImageCodec::Calibrate(const cv::Mat& img, const Dim& dim, const Transform& transform, bool result_image) {
     auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;

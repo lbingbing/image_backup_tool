@@ -590,14 +590,14 @@ void Widget::TaskSavePartComplete() {
 }
 
 void Widget::TaskFinalizationStart(Task::FinalizationProgress finalization_progress) {
-    m_task_finalization_progress_dialog = new QProgressDialog("finalizing task", QString(), finalization_progress.done_block_num, finalization_progress.block_num, this);
-    m_task_finalization_progress_dialog->setMinimumDuration(0);
-    m_task_finalization_progress_dialog->setWindowModality(Qt::WindowModal);
+    //m_task_finalization_progress_dialog = new QProgressDialog("finalizing task", QString(), finalization_progress.done_block_num, finalization_progress.block_num, this);
+    //m_task_finalization_progress_dialog->setMinimumDuration(0);
+    //m_task_finalization_progress_dialog->setWindowModality(Qt::WindowModal);
 
 }
 
 void Widget::TaskFinalizationProgress(Task::FinalizationProgress finalization_progress) {
-    m_task_finalization_progress_dialog->setValue(finalization_progress.done_block_num);
+    //m_task_finalization_progress_dialog->setValue(finalization_progress.done_block_num);
 }
 
 void Widget::ErrorMsg(std::string msg) {

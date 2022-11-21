@@ -180,5 +180,5 @@ private:
     QLabel* m_result_label = nullptr;
     QLabel* m_status_label = nullptr;
     QProgressBar* m_task_save_part_progress_bar = nullptr;
-    QProgressDialog* m_task_finalization_progress_dialog = nullptr;
+    //QProgressDialog* m_task_finalization_progress_dialog = nullptr;
 };

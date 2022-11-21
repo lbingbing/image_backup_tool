@@ -13,7 +13,7 @@ int parse_task_status_server_port(const std::string& task_status_server_port_str
         fail = true;
     }
     if (fail || task_status_server_port < 8100 | task_status_server_port > 8200) {
-        throw invalid_image_codec_argument("invalid  '" + task_status_server_port_str + "'");
+        throw invalid_image_codec_argument("invalid port '" + task_status_server_port_str + "'");
     }
     return task_status_server_port;
 }

@@ -7,7 +7,8 @@
 #include "decode_image_thread.h"
 #include "image_fetcher.h"
 
-PixelImageCodecWorker::PixelImageCodecWorker(PixelType pixel_type) : m_pixel_image_codec(pixel_type) {}
+PixelImageCodecWorker::PixelImageCodecWorker(PixelType pixel_type) : m_pixel_image_codec(pixel_type) {
+}
 
 void PixelImageCodecWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, int interval) {
     while (running) {
@@ -128,27 +129,40 @@ void PixelImageCodecWorker::SavePartWorker(std::atomic<bool>& running, ThreadSaf
     if (std::filesystem::is_regular_file(task.TaskPath())) {
         task.Load();
         if (dim != task.GetDim() || pixel_size != task.GetPixelSize() || part_num != task.GetPartNum()) {
-            std::ostringstream oss;
-            oss << "inconsistent task config\n";
-            oss << "task:\n";
-            oss << "dim=" << task.GetDim() << "\n";
-            oss << "pixel_type=" << get_pixel_type_str(task.GetPixelType()) << "\n";
-            oss << "pixel_size=" << task.GetPixelSize() << "\n";
-            oss << "space_size=" << task.GetSpaceSize() << "\n";
-            oss << "part_num=" << task.GetPartNum() << "\n";
-            oss << "input:\n";
-            oss << "dim=" << dim << "\n";
-            oss << "pixel_type=" << get_pixel_type_str(pixel_type) << "\n";
-            oss << "pixel_size=" << pixel_size << "\n";
-            oss << "space_size=" << space_size << "\n";
-            oss << "part_num=" << part_num << "\n";
-            if (error_cb) error_cb(oss.str());
+            if (error_cb) {
+                std::ostringstream oss;
+                oss << "inconsistent task config\n";
+                oss << "task:\n";
+                oss << "dim=" << task.GetDim() << "\n";
+                oss << "pixel_type=" << get_pixel_type_str(task.GetPixelType()) << "\n";
+                oss << "pixel_size=" << task.GetPixelSize() << "\n";
+                oss << "space_size=" << task.GetSpaceSize() << "\n";
+                oss << "part_num=" << task.GetPartNum() << "\n";
+                oss << "input:\n";
+                oss << "dim=" << dim << "\n";
+                oss << "pixel_type=" << get_pixel_type_str(pixel_type) << "\n";
+                oss << "pixel_size=" << pixel_size << "\n";
+                oss << "space_size=" << space_size << "\n";
+                oss << "part_num=" << part_num << "\n";
+                error_cb(oss.str());
+            }
             running = false;
             while (part_q.Pop());
             return;
         }
     } else {
         task.Init(dim, pixel_type, pixel_size, space_size, part_num);
+        bool success = task.AllocateBlob();
+        if (!success) {
+            if (error_cb) {
+                std::ostringstream oss;
+                oss << "can't allocate file '" << task.BlobPath() << "'\n";
+                error_cb(oss.str());
+            }
+            running = false;
+            while (part_q.Pop());
+            return;
+        }
     }
     task.SetFinalizationCb(finalization_start_cb, finalization_progress_cb, finalization_complete_cb);
     auto t0 = std::chrono::high_resolution_clock::now();

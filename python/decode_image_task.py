@@ -3,6 +3,10 @@ import struct
 
 import pixel_codec
 
+def get_part_byte_num(tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type):
+    codec = pixel_codec.create_pixel_codec(pixel_type)
+    return tile_x_num * tile_y_num * tile_x_size * tile_y_size * codec.bit_num_per_pixel // 8 - codec.meta_byte_num
+
 class Task:
     def __init__(self, path):
         self.path = path
@@ -34,9 +38,16 @@ class Task:
         self.finalization_progress_cb = finalization_progress_cb
         self.finalization_complete_cb = finalization_complete_cb
 
+    def allocate_blob(self):
+        if os.path.isfile(self.blob_path):
+            return True
+        with open(self.blob_path, 'wb') as blob_file:
+            part_byte_num = get_part_byte_num(*self.dim, self.pixel_type)
+            blob_file.truncate(part_byte_num * self.part_num)
+        return True
+
     def flush(self):
-        mode = 'r+b' if os.path.isfile(self.blob_path) else 'w+b'
-        with open(self.blob_path, mode) as blob_file:
+        with open(self.blob_path, 'r+b') as blob_file:
             for part_id, part_bytes in self.blob_buf:
                 blob_file.seek(part_id * len(part_bytes))
                 blob_file.write(part_bytes)
@@ -72,25 +83,10 @@ class Task:
     def finalize(self):
         self.flush()
         with open(self.blob_path, 'r+b') as blob_file:
-            blob_file.seek(0, io.SEEK_SET)
+            part_byte_num = get_part_byte_num(*self.dim, self.pixel_type)
+            blob_file.seek(part_byte_num * (self.part_num - 1), io.SEEK_SET);
             file_size_bytes = blob_file.read(8)
             file_size = struct.unpack('<Q', file_size_bytes)[0]
-            block_size = 1024 * 1024
-            block_num = (file_size + block_size - 1) // block_size
-            block_index = 0
-            if self.finalization_start_cb:
-                self.finalization_start_cb(0, block_num)
-            while True:
-                offset = block_size * block_index
-                blob_file.seek(8 + offset, io.SEEK_SET)
-                block = blob_file.read(block_size)
-                if not block:
-                    break
-                blob_file.seek(offset, io.SEEK_SET)
-                blob_file.write(block)
-                block_index += 1
-                if self.finalization_progress_cb:
-                    self.finalization_progress_cb(block_index, block_num)
             blob_file.truncate(file_size)
         os.rename(self.blob_path, self.path)
         os.remove(self.task_path)
@@ -112,6 +108,18 @@ class Task:
                     show_undone_part_num -= 1
                     if show_undone_part_num == 0:
                         break
+
+def get_task_bytes(file_path, part_byte_num):
+    with open(file_path, 'rb') as f:
+        file_bytes = bytearray(f.read())
+    file_size = len(file_bytes)
+    left_bytes_num1 = file_size % part_byte_num
+    padding_bytes1 = bytes([0] * (part_byte_num - left_bytes_num1)) if left_bytes_num1 else b''
+    size_bytes = bytearray(struct.pack('<Q', file_size))
+    padding_bytes2 = bytes([0] * (part_byte_num - len(size_bytes)))
+    raw_bytes = file_bytes + padding_bytes1 + size_bytes + padding_bytes2
+    part_num = len(raw_bytes) // part_byte_num
+    return raw_bytes, part_num
 
 def is_part_done(task_status_bytes, part_id):
     byte_index = part_id // 8

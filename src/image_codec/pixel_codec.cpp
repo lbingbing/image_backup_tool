@@ -217,7 +217,7 @@ std::unique_ptr<PixelCodec> create_pixel_codec(PixelType pixel_type) {
     } else if (pixel_type == PixelType::PIXEL8) {
         pixel_codec = std::make_unique<Pixel8Codec>();
     } else {
-        throw std::invalid_argument("invalid pixel type " + static_cast<int>(pixel_type));
+        throw std::invalid_argument("invalid pixel type '" + std::to_string(static_cast<int>(pixel_type)) + "'");
     }
     return pixel_codec;
 }

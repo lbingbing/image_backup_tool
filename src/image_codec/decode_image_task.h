@@ -22,6 +22,7 @@ public:
     IMAGE_CODEC_API void Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num);
     IMAGE_CODEC_API void Load();
     IMAGE_CODEC_API void SetFinalizationCb(FinalizationStartCb finalization_start_cb, FinalizationProgressCb finalization_progress_cb, FinalizationCompleteCb finalization_complete_cb);
+    IMAGE_CODEC_API bool AllocateBlob();
     IMAGE_CODEC_API void UpdatePart(uint32_t part_id, const Bytes& part_bytes);
     IMAGE_CODEC_API void Flush();
     IMAGE_CODEC_API bool IsDone() const;
@@ -30,6 +31,7 @@ public:
 
     uint32_t DonePartNum() const { return m_done_part_num; }
     const std::string& TaskPath() const { return m_task_path; }
+    const std::string& BlobPath() const { return m_blob_path; }
     Dim GetDim() const { return m_dim; }
     PixelType GetPixelType() const { return m_pixel_type; }
     int GetPixelSize() const { return m_pixel_size; }
@@ -58,3 +60,6 @@ private:
     FinalizationProgressCb m_finalization_progress_cb;
     FinalizationCompleteCb m_finalization_complete_cb;
 };
+
+IMAGE_CODEC_API uint32_t get_part_byte_num(const Dim& dim, PixelType pixel_type);
+IMAGE_CODEC_API bool is_part_done(const Bytes& task_status_bytes, uint32_t part_id);

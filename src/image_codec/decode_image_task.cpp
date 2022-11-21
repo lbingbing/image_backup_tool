@@ -3,6 +3,7 @@
 #include <fstream>
 #include <algorithm>
 #include <filesystem>
+#include <system_error>
 
 #include "pixel_codec.h"
 #include "decode_image_task.h"
@@ -40,6 +41,15 @@ void Task::SetFinalizationCb(FinalizationStartCb finalization_start_cb, Finaliza
     m_finalization_complete_cb = finalization_complete_cb;
 }
 
+bool Task::AllocateBlob() {
+    if (std::filesystem::is_regular_file(m_blob_path)) return true;
+    std::ofstream(m_blob_path, std::ios_base::binary);
+    uint64_t part_byte_num = get_part_byte_num(m_dim, m_pixel_type);
+    std::error_code ec;
+    std::filesystem::resize_file(m_blob_path, part_byte_num * m_part_num, ec);
+    return !ec;
+}
+
 bool Task::IsPartDone(uint32_t part_id) const {
     auto byte_index = part_id / 8;
     char mask = 0x1 << (part_id % 8);
@@ -62,9 +72,7 @@ void Task::UpdatePart(uint32_t part_id, const Bytes& part_bytes) {
 }
 
 void Task::Flush() {
-    auto blob_mode = std::ios_base::out | std::ios_base::binary;
-    if (std::filesystem::is_regular_file(m_blob_path)) blob_mode |= std::ios_base::in;
-    std::fstream blob_file(m_blob_path, blob_mode);
+    std::fstream blob_file(m_blob_path, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
     for (const auto& [part_id, part_bytes] : m_blob_buf) {
         blob_file.seekp(part_id * part_bytes.size());
         blob_file.write(reinterpret_cast<const char*>(part_bytes.data()), part_bytes.size());
@@ -88,25 +96,11 @@ bool Task::IsDone() const {
 
 void Task::Finalize() {
     Flush();
-    std::fstream blob_file(m_blob_path, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
-    blob_file.seekg(0);
+    std::ifstream blob_file(m_blob_path, std::ios_base::binary);
+    uint64_t part_byte_num = get_part_byte_num(m_dim, m_pixel_type);
+    blob_file.seekg(part_byte_num * (m_part_num - 1));
     uint64_t file_size = 0;
     blob_file.read(reinterpret_cast<char*>(&file_size), sizeof(file_size));
-    constexpr uint64_t BLOCK_SIZE = 1024 * 1024;
-    Bytes block(BLOCK_SIZE);
-    uint64_t block_num = (file_size + BLOCK_SIZE - 1) / BLOCK_SIZE;
-    if (m_finalization_start_cb) m_finalization_start_cb({0, block_num});
-    for (uint64_t block_index = 0; block_index < block_num; ++block_index) {
-        uint64_t offset = BLOCK_SIZE * block_index;
-        blob_file.seekg(8 + offset);
-        blob_file.read(reinterpret_cast<char*>(block.data()), block.size());
-        auto size = blob_file.gcount();
-        if (!size) break;
-        blob_file.clear();
-        blob_file.seekp(offset);
-        blob_file.write(reinterpret_cast<const char*>(block.data()), size);
-        if (m_finalization_progress_cb) m_finalization_progress_cb({block_index+1, block_num});
-    }
     blob_file.close();
     std::filesystem::resize_file(m_blob_path, file_size);
     std::filesystem::rename(m_blob_path, m_path);
@@ -131,4 +125,15 @@ void Task::Print(int64_t show_undone_part_num) const {
             }
         }
     }
+}
+
+uint32_t get_part_byte_num(const Dim& dim, PixelType pixel_type) {
+    auto codec = create_pixel_codec(pixel_type);
+    return dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * codec->BitNumPerPixel() / 8 - PixelCodec::META_BYTE_NUM;
+}
+
+bool is_part_done(const Bytes& task_status_bytes, uint32_t part_id) {
+    auto byte_index = part_id / 8;
+    char mask = 0x1 << (part_id % 8);
+    return task_status_bytes[byte_index] & mask;
 }

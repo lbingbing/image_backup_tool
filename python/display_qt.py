@@ -447,17 +447,10 @@ class TaskPage(QtWidgets.QWidget):
     def toggle_task_start_stop(self):
         if self.context.state == State.CONFIG:
             self.pixel_codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
-            self.part_byte_num = self.context.tile_x_num * self.context.tile_y_num * self.context.tile_x_size * self.context.tile_y_size * self.pixel_codec.bit_num_per_pixel // 8 - self.pixel_codec.meta_byte_num
+            self.part_byte_num = decode_image_task.get_part_byte_num(self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size, self.context.pixel_type)
             if self.validate_config():
                 self.context.state = State.DISPLAY
-                with open(self.target_file_path, 'rb') as f:
-                    file_bytes = bytearray(f.read())
-                size_bytes = bytearray(struct.pack('<Q', len(file_bytes)))
-                self.raw_bytes = size_bytes + file_bytes
-                left_bytes_num = len(self.raw_bytes) % self.part_byte_num
-                if left_bytes_num:
-                    self.raw_bytes += bytes([0] * (self.part_byte_num - left_bytes_num))
-                part_num = (len(self.raw_bytes) + self.part_byte_num - 1) // self.part_byte_num
+                self.raw_bytes, part_num = decode_image_task.get_task_bytes(self.target_file_path, self.part_byte_num)
                 if self.undone_part_ids:
                     assert part_num == self.part_num
                     self.cur_undone_part_id_index = 0
