@@ -41,11 +41,11 @@ public:
 };
 
 template <typename T>
-const char* TypeNameStr = "unknown";
+inline const char* TypeNameStr = "unknown";
 template <>
-const char* TypeNameStr<int> = "int";
+inline const char* TypeNameStr<int> = "int";
 template <>
-const char* TypeNameStr<float> = "float";
+inline const char* TypeNameStr<float> = "float";
 
 template <typename T> inline T stox(const std::string& s);
 template <> inline int stox(const std::string& s) { return std::stoi(s); }

@@ -6,7 +6,7 @@
 #include "pixel_codec.h"
 
 namespace {
-    Bytes encrypt_bytes(Bytes& bytes) {
+    Bytes encrypt_bytes(const Bytes& bytes) {
         Bytes encrypted_bytes(bytes.rbegin(), bytes.rend());
         for (auto& e : encrypted_bytes) {
             e ^= Byte(170);

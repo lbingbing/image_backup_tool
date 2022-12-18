@@ -15,6 +15,7 @@ public:
     static constexpr int PART_ID_BYTE_NUM = 4;
     static constexpr int META_BYTE_NUM = CRC_BYTE_NUM + PART_ID_BYTE_NUM;
 
+    virtual ~PixelCodec() {}
     virtual PixelType GetPixelType() = 0;
     virtual int PixelValueNum() = 0;
     virtual int BitNumPerPixel() = 0;
