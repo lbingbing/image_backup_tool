@@ -4,15 +4,15 @@ add_library(image_codec SHARED
     pixel_codec.cpp
     pixel_codec_capi.cpp
     transform_utils.cpp
-    decode_image.cpp
-    decode_image_task.cpp
-    decode_image_task_status_server.cpp
-    image_fetcher.cpp
-    decode_image_thread.cpp
+    image_decoder.cpp
+    image_decode_task.cpp
+    image_decode_task_status_server.cpp
+    image_stream.cpp
+    image_decode_worker.cpp
 )
 target_compile_definitions(image_codec PRIVATE IMAGE_CODEC_EXPORTS ${compile_flags})
 target_include_directories(image_codec PRIVATE ${external_include_dirs})
 target_link_libraries(image_codec ${external_libs})
 
 install(TARGETS image_codec DESTINATION bin)
-install(FILES image_fetcher.ini DESTINATION bin)
+install(FILES image_stream.ini DESTINATION bin)

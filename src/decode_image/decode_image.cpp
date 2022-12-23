@@ -7,8 +7,8 @@
 
 #include "image_codec.h"
 
-void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file, int print_detailed_mismatch_info_level) {
-    auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform, calibration, true);
+void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file) {
+    auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform, calibration, true);
     if (save_result_image) {
         auto pos = image_file.rfind(".");
         auto image_file_prefix = image_file.substr(0, pos);
@@ -26,62 +26,11 @@ void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, con
             }
         }
     }
-    if (part_pixels.empty()) {
-        std::cout << "pixels decode fail\n";
+    if (success) {
+        std::cout << "pass part_id=" << part_id << "\n";
     } else {
-        int mismatch_count = 0;
-        std::map<Pixel, std::map<Pixel, int>> mismatch_counts;
-        for (int tile_y_id = 0; tile_y_id < dim.tile_y_num; ++tile_y_id) {
-            for (int tile_x_id = 0; tile_x_id < dim.tile_x_num; ++tile_x_id) {
-                for (int y = 0; y < dim.tile_y_size; ++y) {
-                    for (int x = 0; x < dim.tile_x_size; ++x) {
-                        Pixel golden_pixel = (x + y + tile_x_id + tile_y_id) % image_decoder->GetPixelCodec().PixelValueNum();
-                        int index = ((tile_y_id * dim.tile_x_num + tile_x_id) * dim.tile_y_size + y) * dim.tile_x_size + x;
-                        auto actual_pixel = part_pixels[index];
-                        if (actual_pixel != golden_pixel) {
-                            if (print_detailed_mismatch_info_level >= 2) {
-                                std::cout << "pixel_" << tile_x_id << "_" << tile_y_id << "_" << x << "_" << y << ": " << get_pixel_name(golden_pixel) << " -> " << get_pixel_name(actual_pixel) << "\n";
-                            }
-                            ++mismatch_count;
-                            ++mismatch_counts[golden_pixel][actual_pixel];
-                        }
-                    }
-                }
-            }
-        }
-        if (print_detailed_mismatch_info_level >= 1) {
-            for (const auto& [golden_pixel, e] : mismatch_counts) {
-                for (const auto& [actual_pixel, count] : e) {
-                    std::cout << "mismatch " << get_pixel_name(golden_pixel) << " -> " << get_pixel_name(actual_pixel) << ": " << count << "\n";
-                }
-            }
-        }
-        std::cout << "mismatch count " << mismatch_count << "\n";
-        if (mismatch_counts.empty()) {
-            std::cout << "color calibration pass\n";
-        } else {
-            std::cout << "color calibration fail\n";
-        }
+        std::cout << "fail\n";
     }
-}
-
-
-bool is_mismatch(const Pixels& part_pixels, ImageDecoder* image_decoder, const Dim& dim) {
-    for (int tile_y_id = 0; tile_y_id < dim.tile_y_num; ++tile_y_id) {
-        for (int tile_x_id = 0; tile_x_id < dim.tile_x_num; ++tile_x_id) {
-            for (int y = 0; y < dim.tile_y_size; ++y) {
-                for (int x = 0; x < dim.tile_x_size; ++x) {
-                    Pixel golden_pixel = (x + y + tile_x_id + tile_y_id) % image_decoder->GetPixelCodec().PixelValueNum();
-                    int index = ((tile_y_id * dim.tile_x_num + tile_x_id) * dim.tile_y_size + y) * dim.tile_x_size + x;
-                    auto actual_pixel = part_pixels[index];
-                    if (actual_pixel != golden_pixel) {
-                        return true;
-                    }
-                }
-            }
-        }
-    }
-    return false;
 }
 
 using InputQueue = ThreadSafeQueue<std::tuple<int, int, int>>;
@@ -96,8 +45,8 @@ void scan1_worker(ResultQueue& q_result, InputQueue& q_in, ImageDecoder* image_d
         transform1.pixelization_threshold[0] = b;
         transform1.pixelization_threshold[1] = g;
         transform1.pixelization_threshold[2] = r;
-        auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
-        if (!part_pixels.empty() && !is_mismatch(part_pixels, image_decoder, dim)) {
+        auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
+        if (success) {
             q_result.Emplace(true, b, g, r);
         } else {
             q_result.Emplace(false, 0, 0, 0);
@@ -160,9 +109,9 @@ void scan2(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, cons
         transform1.pixelization_threshold[0] = c;
         transform1.pixelization_threshold[1] = c;
         transform1.pixelization_threshold[2] = c;
-        auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
+        auto [success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
         std::cout << "bgr: " << c << "," << c << "," << c << " ";
-        if (!part_pixels.empty() && !is_mismatch(part_pixels, image_decoder, dim)) {
+        if (success) {
             std::cout << "pass";
         } else {
             std::cout << "fail";
@@ -178,7 +127,6 @@ int main(int argc, char** argv) {
         bool save_result_image = false;
         int scan_mode = 0;
         int scan_bgr_radius = 0;
-        int print_detailed_mismatch_info_level = 0;
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
@@ -188,8 +136,7 @@ int main(int argc, char** argv) {
         desc_handler("calibration_file", boost::program_options::value<std::string>(&calibration_file), "calibration file");
         desc_handler("save_result_image", boost::program_options::value<bool>(&save_result_image), "dump result image");
         desc_handler("scan_mode", boost::program_options::value<int>(&scan_mode), "scan mode, 1: bgr; 2: gray");
-        desc_handler("scan_bgr_radius", boost::program_options::value<int>(&scan_bgr_radius), "scan bgr radius");
-        desc_handler("print_detailed_mismatch_info_level", boost::program_options::value<int>(&print_detailed_mismatch_info_level), "print detailed mismatch info");
+        desc_handler("scan_bgr_radius", boost::program_options::value<int>(&scan_bgr_radius), "scan radius");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
         p_desc.add("image_file", 1);
@@ -230,7 +177,7 @@ int main(int argc, char** argv) {
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
         if (scan_mode == 0) {
-            decode(&image_decoder, img, dim, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
+            decode(&image_decoder, img, dim, transform, calibration, save_result_image, image_file);
         } else if (scan_mode == 1) {
             scan1(&image_decoder, img, dim, transform, calibration, scan_bgr_radius);
         } else if (scan_mode == 2) {

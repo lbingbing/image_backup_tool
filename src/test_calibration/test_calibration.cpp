@@ -42,7 +42,7 @@ int main(int argc, char** argv) {
         Transform transform = get_transform(vm);
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
-        auto [img1, calibration, result_imgs] = PixelImageCodec(PixelType::PIXEL2).Calibrate(img, dim, transform);
+        auto [img1, calibration, result_imgs] = ImageDecoder(PixelType::PIXEL2).Calibrate(img, dim, transform);
         auto pos = image_file.rfind(".");
         auto image_file_prefix = image_file.substr(0, pos);
         auto image_file_suffix = image_file.substr(pos);

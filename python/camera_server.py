@@ -23,7 +23,7 @@ def image_to_msg_bytes(image):
     ret, image_array = cv2.imencode('.png', image)
     image_bytes = image_array.tobytes()
     base64_image_bytes = base64.b64encode(image_bytes)
-    len_bytes = struct.pack('<I', len(base64_image_bytes))
+    len_bytes = struct.pack('<Q', len(base64_image_bytes))
     return len_bytes + base64_image_bytes
 
 class RingBuffer:
@@ -160,7 +160,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     if args.image_port is None:
-        cmd = './test_image_fetcher.exe'
+        cmd = './test_image_stream.exe'
         process = subprocess.Popen(cmd.split(), stdin=subprocess.PIPE)
         start_server(args.camera_port, PipeCb(process))
         try:

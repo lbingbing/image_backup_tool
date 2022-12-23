@@ -6,8 +6,8 @@ import re
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import pixel_codec
-import decode_image_task
-import decode_image_task_status_client
+import image_decode_task
+import image_decode_task_status_client
 
 class Parameters:
     def __init__(self):
@@ -430,7 +430,7 @@ class TaskPage(QtWidgets.QWidget):
         if file_path[0]:
             task_file_path = file_path[0]
             self.task_file_line_edit.setText(task_file_path)
-            task = decode_image_task.Task(task_file_path[:task_file_path.rindex('.task')])
+            task = image_decode_task.Task(task_file_path[:task_file_path.rindex('.task')])
             task.load()
             tile_x_num, tile_y_num, tile_x_size, tile_y_size = task.dim
             self.tile_x_num_spin_box.setValue(tile_x_num)
@@ -447,10 +447,10 @@ class TaskPage(QtWidgets.QWidget):
     def toggle_task_start_stop(self):
         if self.context.state == State.CONFIG:
             self.pixel_codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
-            self.part_byte_num = decode_image_task.get_part_byte_num(self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size, self.context.pixel_type)
+            self.part_byte_num = image_decode_task.get_part_byte_num(self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size, self.context.pixel_type)
             if self.validate_config():
                 self.context.state = State.DISPLAY
-                self.raw_bytes, part_num = decode_image_task.get_task_bytes(self.target_file_path, self.part_byte_num)
+                self.raw_bytes, part_num = image_decode_task.get_task_bytes(self.target_file_path, self.part_byte_num)
                 if self.undone_part_ids:
                     assert part_num == self.part_num
                     self.cur_undone_part_id_index = 0
@@ -464,7 +464,7 @@ class TaskPage(QtWidgets.QWidget):
                     m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
                     ip = m.group(1)
                     port = int(m.group(2))
-                    self.task_status_client = decode_image_task_status_client.TaskStatusClient(ip, port)
+                    self.task_status_client = image_decode_task_status_client.TaskStatusClient(ip, port)
                     if self.task_status_auto_update:
                         self.fetch_task_status()
                 self.task_frame.setEnabled(False)
@@ -577,7 +577,7 @@ class TaskPage(QtWidgets.QWidget):
         task_status_bytes = self.task_status_client.get_task_status()
         if task_status_bytes:
             assert len(task_status_bytes) == (self.part_num + 7) // 8
-            self.undone_part_ids = [part_id for part_id in range(self.part_num) if not decode_image_task.is_part_done(task_status_bytes, part_id)]
+            self.undone_part_ids = [part_id for part_id in range(self.part_num) if not image_decode_task.is_part_done(task_status_bytes, part_id)]
             self.cur_undone_part_id_index = 0
             self.cur_part_id = self.undone_part_ids[self.cur_undone_part_id_index]
             self.cur_part_id_spin_box.setValue(self.cur_part_id)

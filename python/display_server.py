@@ -9,7 +9,7 @@ import wsgiref.util
 import mimetypes
 
 import pixel_codec
-import decode_image_task
+import image_decode_task
 
 class App:
     def __init__(self, cfg):
@@ -20,7 +20,7 @@ class App:
         self.interval = cfg['interval']
         self.auto_display = cfg['auto_display']
 
-        self.raw_bytes, self.part_num = decode_image_task.get_task_bytes(cfg['file_path'], self.part_byte_num)
+        self.raw_bytes, self.part_num = image_decode_task.get_task_bytes(cfg['file_path'], self.part_byte_num)
 
     def is_init_request(self, path):
         return path.startswith('init')
