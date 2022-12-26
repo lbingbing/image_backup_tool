@@ -34,16 +34,22 @@ def img_worker(running, running_lock, q, window_number, worker_id):
             break
 
 def server_worker(q, window_number, port):
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.bind(('', port))
-    s.listen(1)
-    conn, addr = s.accept()
-    while True:
-        msg_bytes = q.get()
-        q.task_done()
-        if msg_bytes is None:
-            break
-        conn.sendall(msg_bytes)
+    running = True
+    while running:
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.bind(('', port))
+        s.listen(1)
+        conn, addr = s.accept()
+        while True:
+            msg_bytes = q.get()
+            q.task_done()
+            if msg_bytes is None:
+                running = False
+                break
+            try:
+                conn.sendall(msg_bytes)
+            except Exception:
+                pass
 
 if __name__ == '__main__':
     import argparse
@@ -82,12 +88,15 @@ if __name__ == '__main__':
         for t in img_threads:
             t.join()
         q.put(None)
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.connect(('127.0.0.1', args.port))
-            while True:
-                data = s.recv(4096)
-                if not data:
-                    break
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect(('127.0.0.1', args.port))
+                while True:
+                    data = s.recv(4096)
+                    if not data:
+                        break
+        except Exception:
+            pass
         server_thread.join()
         q.join()
 

@@ -4,6 +4,7 @@ import enum
 import time
 import threading
 
+import image_codec_types
 import pixel_codec
 import image_decode_task
 
@@ -58,7 +59,7 @@ class App:
         self.tile_y_num = tile_y_num
         self.tile_x_size = tile_x_size
         self.tile_y_size = tile_y_size
-        self.pixel_type = pixel_codec.parse_pixel_type(pixel_type)
+        self.pixel_type = image_codec_types.parse_pixel_type(pixel_type)
         self.state = State.INFO
         self.task_status_auto_update = False
         self.task_status_auto_update_threshold = 200
@@ -169,21 +170,21 @@ class App:
                                 self.draw_color_pixel(tile_x+x, tile_y+y, BLACK_COLOR_PAIR)
                             else:
                                 pixel = data[tile_y_id][tile_x_id][y-1][x-1]
-                                if pixel == pixel_codec.PixelValue.WHITE.value:
+                                if pixel == image_codec_types.PixelValue.WHITE.value:
                                     color_pair = WHITE_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.BLACK.value:
+                                elif pixel == image_codec_types.PixelValue.BLACK.value:
                                     color_pair = BLACK_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.RED.value:
+                                elif pixel == image_codec_types.PixelValue.RED.value:
                                     color_pair = RED_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.BLUE.value:
+                                elif pixel == image_codec_types.PixelValue.BLUE.value:
                                     color_pair = BLUE_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.GREEN.value:
+                                elif pixel == image_codec_types.PixelValue.GREEN.value:
                                     color_pair = GREEN_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.CYAN.value:
+                                elif pixel == image_codec_types.PixelValue.CYAN.value:
                                     color_pair = CYAN_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.MAGENTA.value:
+                                elif pixel == image_codec_types.PixelValue.MAGENTA.value:
                                     color_pair = MAGENTA_COLOR_PAIR
-                                elif pixel == pixel_codec.PixelValue.YELLOW.value:
+                                elif pixel == image_codec_types.PixelValue.YELLOW.value:
                                     color_pair = YELLOW_COLOR_PAIR
                                 else:
                                     assert 0, "invalid pixel '{}'".format(pixel)
