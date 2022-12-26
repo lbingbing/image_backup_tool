@@ -3,6 +3,11 @@ import struct
 
 import pixel_codec
 
+class FinalizationProgress:
+    def __init__(self):
+        self.done_block_num = 0
+        self.block_num = 0
+
 def get_part_byte_num(tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type):
     codec = pixel_codec.create_pixel_codec(pixel_type)
     return tile_x_num * tile_y_num * tile_x_size * tile_y_size * codec.bit_num_per_pixel // 8 - codec.meta_byte_num
@@ -29,7 +34,8 @@ class Task:
     def load(self):
         with open(self.task_path, 'rb') as task_file:
             task_bytes = task_file.read()
-        *self.dim, pixel_type, self.pixel_size, self.space_size, self.part_num, self.done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
+        *dim, pixel_type, self.pixel_size, self.space_size, self.part_num, self.done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
+        self.dim = tuple(dim)
         self.pixel_type = pixel_codec.PixelType(pixel_type)
         self.task_status_bytes = bytearray(task_bytes[36:])
 

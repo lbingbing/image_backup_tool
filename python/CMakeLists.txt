@@ -1,4 +1,5 @@
 set(file_to_install
+    image_codec_types.py
     pixel_codec.py
     test_pixel_codec.py
     test_pixel_codec_python_c.py

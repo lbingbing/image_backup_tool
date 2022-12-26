@@ -6,7 +6,7 @@ int main(int argc, char *argv[]) {
     try {
         QApplication app(argc, argv);
         QCommandLineParser parser;
-        parser.setApplicationDescription("decode image camera");
+        parser.setApplicationDescription("decode image stream");
         parser.addHelpOption();
         parser.addPositionalArgument("output_file", "output file");
         parser.addPositionalArgument("dim", "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");

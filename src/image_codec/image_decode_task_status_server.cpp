@@ -80,7 +80,6 @@ void TaskStatusServer::Worker() {
                     done2 += boost::asio::write(socket, boost::asio::buffer(task_status_bytes.data() + done2, task_status_byte_len - done2));
                 }
             }
-            //std::cout << "server send " << task_status_byte_len << " bytes\n";
         }
         catch (std::exception& e) {
             //std::cerr << e.what() << "\n";

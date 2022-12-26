@@ -2,30 +2,7 @@ import enum
 import struct
 import zlib
 
-class PixelType(enum.Enum):
-    PIXEL2 = 0
-    PIXEL4 = 1
-    PIXEL8 = 2
-
-class PixelValue(enum.Enum):
-    WHITE   = 0
-    BLACK   = 1
-    RED     = 2
-    BLUE    = 3
-    GREEN   = 4
-    CYAN    = 5
-    MAGENTA = 6
-    YELLOW  = 7
-
-def parse_pixel_type(pixel_type_str):
-    if pixel_type_str == 'pixel2':
-        return PixelType.PIXEL2
-    elif pixel_type_str == 'pixel4':
-        return PixelType.PIXEL4
-    elif pixel_type_str == 'pixel8':
-        return PixelType.PIXEL8
-    else:
-        assert 0, "invalid pixel type '{}'".format(pixel_type_str)
+import image_codec_types
 
 def encrypt_bytes(bytes1):
     bytes1 = bytearray(reversed(bytes1))
@@ -85,7 +62,7 @@ class Pixel2Codec(PixelCodec):
     bit_num_per_pixel = 1
 
     def get_pixel_type(self):
-        return PixelType.PIXEL2
+        return image_codec_types.PixelType.PIXEL2
 
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
@@ -99,7 +76,7 @@ class Pixel4Codec(PixelCodec):
     bit_num_per_pixel = 2
 
     def get_pixel_type(self):
-        return PixelType.PIXEL4
+        return image_codec_types.PixelType.PIXEL4
 
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
@@ -113,7 +90,7 @@ class Pixel8Codec(PixelCodec):
     bit_num_per_pixel = 3
 
     def get_pixel_type(self):
-        return PixelType.PIXEL8
+        return image_codec_types.PixelType.PIXEL8
 
     def bytes_to_pixels(self, b):
         s = ''.join('{:0>8b}'.format(e) for e in b)
@@ -126,11 +103,11 @@ class Pixel8Codec(PixelCodec):
         return bytes([int(s[i:i+8], 2) for i in range(0, len(s), 8)])
 
 def create_pixel_codec(pixel_type):
-    if pixel_type == PixelType.PIXEL2:
+    if pixel_type == image_codec_types.PixelType.PIXEL2:
         return Pixel2Codec()
-    elif pixel_type == PixelType.PIXEL4:
+    elif pixel_type == image_codec_types.PixelType.PIXEL4:
         return Pixel4Codec()
-    elif pixel_type == PixelType.PIXEL8:
+    elif pixel_type == image_codec_types.PixelType.PIXEL8:
         return Pixel8Codec()
     else:
         assert 0, "invalid pixel type '{}'".format(pixel_type)

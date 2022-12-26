@@ -5,6 +5,7 @@ import struct
 import re
 from PySide6 import QtCore, QtWidgets, QtGui
 
+import image_codec_types
 import pixel_codec
 import image_decode_task
 import image_decode_task_status_client
@@ -32,7 +33,7 @@ class Context:
         self.tile_y_num = 1
         self.tile_x_size = 40
         self.tile_y_size = 40
-        self.pixel_type = pixel_codec.PixelType.PIXEL2
+        self.pixel_type = image_codec_types.PixelType.PIXEL2
         self.pixel_size = 10
         self.space_size = 1
         self.calibration_pixel_size = 5
@@ -113,9 +114,9 @@ class CalibrationPage(QtWidgets.QWidget):
         pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(pixel_type_label)
         self.pixel_type_combo_box = QtWidgets.QComboBox()
-        self.pixel_type_combo_box.addItem('pixel2', pixel_codec.PixelType.PIXEL2)
-        self.pixel_type_combo_box.addItem('pixel4', pixel_codec.PixelType.PIXEL4)
-        self.pixel_type_combo_box.addItem('pixel8', pixel_codec.PixelType.PIXEL8)
+        self.pixel_type_combo_box.addItem('pixel2', image_codec_types.PixelType.PIXEL2)
+        self.pixel_type_combo_box.addItem('pixel4', image_codec_types.PixelType.PIXEL4)
+        self.pixel_type_combo_box.addItem('pixel8', image_codec_types.PixelType.PIXEL8)
         self.pixel_type_combo_box.setCurrentIndex(0)
         config_frame_layout.addWidget(self.pixel_type_combo_box)
 
@@ -150,11 +151,11 @@ class CalibrationPage(QtWidgets.QWidget):
             if self.calibration_mode_combo_box.currentIndex() == CalibrationMode.POSITION.value:
                 self.calibration_started.emit(CalibrationMode.POSITION, [])
             elif self.calibration_mode_combo_box.currentIndex() == CalibrationMode.COLOR.value:
-                if self.context.pixel_type == pixel_codec.PixelType.PIXEL2:
+                if self.context.pixel_type == image_codec_types.PixelType.PIXEL2:
                     pixel_value_num = pixel_codec.Pixel2Codec.pixel_value_num
-                elif self.context.pixel_type == pixel_codec.PixelType.PIXEL4:
+                elif self.context.pixel_type == image_codec_types.PixelType.PIXEL4:
                     pixel_value_num = pixel_codec.Pixel4Codec.pixel_value_num
-                elif self.context.pixel_type == pixel_codec.PixelType.PIXEL8:
+                elif self.context.pixel_type == image_codec_types.PixelType.PIXEL8:
                     pixel_value_num = pixel_codec.Pixel8Codec.pixel_value_num
                 else:
                     pixel_value_num = 0
@@ -287,9 +288,9 @@ class TaskPage(QtWidgets.QWidget):
         pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(pixel_type_label)
         self.pixel_type_combo_box = QtWidgets.QComboBox()
-        self.pixel_type_combo_box.addItem('pixel2', pixel_codec.PixelType.PIXEL2)
-        self.pixel_type_combo_box.addItem('pixel4', pixel_codec.PixelType.PIXEL4)
-        self.pixel_type_combo_box.addItem('pixel8', pixel_codec.PixelType.PIXEL8)
+        self.pixel_type_combo_box.addItem('pixel2', image_codec_types.PixelType.PIXEL2)
+        self.pixel_type_combo_box.addItem('pixel4', image_codec_types.PixelType.PIXEL4)
+        self.pixel_type_combo_box.addItem('pixel8', image_codec_types.PixelType.PIXEL8)
         self.pixel_type_combo_box.setCurrentIndex(0)
         config_frame_layout.addWidget(self.pixel_type_combo_box)
 
@@ -657,21 +658,21 @@ class Canvas(QtWidgets.QWidget):
                                     painter.setBrush(QtGui.QColor(0, 0, 0))
                                 else:
                                     pixel = self.data[tile_y_id][tile_x_id][y-1][x-1]
-                                    if pixel == pixel_codec.PixelValue.WHITE.value:
+                                    if pixel == image_codec_types.PixelValue.WHITE.value:
                                         painter.setBrush(QtGui.QColor(255, 255, 255))
-                                    elif pixel == pixel_codec.PixelValue.BLACK.value:
+                                    elif pixel == image_codec_types.PixelValue.BLACK.value:
                                         painter.setBrush(QtGui.QColor(0, 0, 0))
-                                    elif pixel == pixel_codec.PixelValue.RED.value:
+                                    elif pixel == image_codec_types.PixelValue.RED.value:
                                         painter.setBrush(QtGui.QColor(255, 0, 0))
-                                    elif pixel == pixel_codec.PixelValue.BLUE.value:
+                                    elif pixel == image_codec_types.PixelValue.BLUE.value:
                                         painter.setBrush(QtGui.QColor(0, 0, 255))
-                                    elif pixel == pixel_codec.PixelValue.GREEN.value:
+                                    elif pixel == image_codec_types.PixelValue.GREEN.value:
                                         painter.setBrush(QtGui.QColor(0, 255, 0))
-                                    elif pixel == pixel_codec.PixelValue.CYAN.value:
+                                    elif pixel == image_codec_types.PixelValue.CYAN.value:
                                         painter.setBrush(QtGui.QColor(0, 255, 255))
-                                    elif pixel == pixel_codec.PixelValue.MAGENTA.value:
+                                    elif pixel == image_codec_types.PixelValue.MAGENTA.value:
                                         painter.setBrush(QtGui.QColor(255, 0, 255))
-                                    elif pixel == pixel_codec.PixelValue.YELLOW.value:
+                                    elif pixel == image_codec_types.PixelValue.YELLOW.value:
                                         painter.setBrush(QtGui.QColor(255, 255, 0))
                                     else:
                                         assert 0, "invalid pixel '{}'".format(pixel)
@@ -754,12 +755,12 @@ class Widget(QtWidgets.QWidget):
         self.context.tile_y_size = tile_y_size
 
     def set_pixel_type(self, index):
-        if index == pixel_codec.PixelType.PIXEL2.value:
-            self.context.pixel_type = pixel_codec.PixelType.PIXEL2
-        elif index == pixel_codec.PixelType.PIXEL4.value:
-            self.context.pixel_type = pixel_codec.PixelType.PIXEL4
-        elif index == pixel_codec.PixelType.PIXEL8.value:
-            self.context.pixel_type = pixel_codec.PixelType.PIXEL8
+        if index == image_codec_types.PixelType.PIXEL2.value:
+            self.context.pixel_type = image_codec_types.PixelType.PIXEL2
+        elif index == image_codec_types.PixelType.PIXEL4.value:
+            self.context.pixel_type = image_codec_types.PixelType.PIXEL4
+        elif index == image_codec_types.PixelType.PIXEL8.value:
+            self.context.pixel_type = image_codec_types.PixelType.PIXEL8
 
     def set_pixel_size(self, pixel_size):
         self.context.pixel_size = pixel_size

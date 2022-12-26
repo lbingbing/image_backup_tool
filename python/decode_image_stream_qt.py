@@ -1,268 +1,585 @@
 import os
 import sys
-import io
-from PySide6 import QtCore, QtGui, QtWidgets
-import multiprocessing
-import queue
 import threading
+import queue
+
+from PySide6 import QtCore, QtGui, QtWidgets
 import cv2
-import PIL.Image
-import PIL.ImageQt
-import time
 
+import image_codec_types
 import transform_utils
-import bit_codec
 import image_decoder
+import image_decode_worker
 import image_decode_task
-import merge_parts
+import image_decode_task_status_server
 
-class MyWidget(QtWidgets.QWidget):
-    def __init__(self, transform_q, mp, frame_q, task_result_q, row_num, col_num):
+class Widget(QtWidgets.QWidget):
+    send_calibration = QtCore.Signal(image_decoder.Calibration)
+    send_calibration_image_result = QtCore.Signal(object, bool, list)
+    send_calibration_progress = QtCore.Signal(image_decode_worker.CalibrationProgress)
+    send_decode_image_result = QtCore.Signal(object, bool, list)
+    send_auto_transform = QtCore.Signal(transform_utils.Transform)
+    send_save_part_progress = QtCore.Signal(image_decode_worker.SavePartProgress)
+    send_save_part_complete = QtCore.Signal()
+    send_save_part_error = QtCore.Signal(str)
+    send_finalization_start = QtCore.Signal(image_decode_task.FinalizationProgress)
+    send_finalization_progress = QtCore.Signal(image_decode_task.FinalizationProgress)
+
+    def __init__(self, output_file, dim, pixel_type, pixel_size, space_size, part_num, mp):
         super().__init__()
 
-        self.row_num = row_num
-        self.col_num = col_num
-
-        self.transform_q = transform_q
+        self.output_file = output_file
+        self.dim = dim
+        self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size = self.dim
+        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(pixel_type)
+        self.pixel_size = pixel_size
+        self.space_size = space_size
+        self.part_num = part_num
         self.mp = mp
-        self.frame_q = frame_q
-        self.task_result_q = task_result_q
+
+        self.transform = transform_utils.Transform()
+        self.calibration = image_decoder.Calibration()
+        self.image = None
+        self.result_images = [[None for j in range(self.tile_x_num)] for i in range(self.tile_y_num)]
+        self.frame_q = queue.Queue(maxsize=128)
+        self.part_q = queue.Queue(maxsize=128)
+
+        self.fetch_image_thread = None
+        self.calibrate_thread = None
+        self.decode_image_threads = []
+        self.decode_image_result_thread = None
+        self.auto_transform_thread = None
+        self.save_part_thread = None
+        self.transfrom_lock = threading.Lock()
+        self.calibration_running = [False]
+        self.task_running = [False]
+        self.running_lock = threading.Lock()
+        self.monitor_on = False
+        self.task_status_server_on = False
+        self.task_status_server = image_decode_task_status_server.TaskStatusServer()
+
+        self.send_calibration.connect(self.receive_calibration)
+        self.send_calibration_image_result.connect(self.show_result)
+        self.send_calibration_progress.connect(self.show_calibration_progress)
+        self.send_decode_image_result.connect(self.show_result)
+        self.send_auto_transform.connect(self.update_auto_transform)
+        self.send_save_part_progress.connect(self.show_task_save_part_progress)
+        self.send_save_part_complete.connect(self.task_save_part_complete)
+        self.send_save_part_error.connect(self.error_msg)
+        self.send_finalization_start.connect(self.task_finalization_start)
+        self.send_finalization_progress.connect(self.task_finalization_progress)
 
         layout = QtWidgets.QVBoxLayout(self)
 
         image_layout = QtWidgets.QHBoxLayout()
-        self.image_label = QtWidgets.QLabel()
-        self.image_label.setScaledContents(True)
-        self.image_label.setMinimumSize(1, 1)
-        image_layout.addWidget(self.image_label)
-        self.result_image_label = QtWidgets.QLabel()
-        self.result_image_label.setScaledContents(True)
-        self.result_image_label.setMinimumSize(1, 1)
-        image_layout.addWidget(self.result_image_label)
         layout.addLayout(image_layout)
 
+        image_w = 600
+        image_h = 400
+
+        image_group_box = QtWidgets.QGroupBox('image')
+        image_layout.addWidget(image_group_box)
+
+        image_layout1 = QtWidgets.QHBoxLayout(image_group_box)
+
+        self.image_label = QtWidgets.QLabel()
+        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+        self.image_label.setFixedSize(image_w, image_h)
+        self.image_label.setScaledContents(True)
+        image_layout1.addWidget(self.image_label)
+
+        result_image_group_box = QtWidgets.QGroupBox('result image')
+        image_layout.addWidget(result_image_group_box)
+
+        result_image_layout = QtWidgets.QVBoxLayout(result_image_group_box)
+
+        self.result_image_labels = [[None for j in range(self.tile_x_num)] for i in range(self.tile_y_num)]
+        for tile_y_id in range(self.tile_y_num):
+            result_image_layout1 = QtWidgets.QHBoxLayout()
+            result_image_layout.addLayout(result_image_layout1)
+            for tile_x_id in range(self.tile_x_num):
+                result_image_label = QtWidgets.QLabel()
+                result_image_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
+                result_image_label.setFixedSize(round(image_w / self.tile_x_num), round(image_h / self.tile_y_num))
+                result_image_label.setScaledContents(True)
+                result_image_layout1.addWidget(result_image_label)
+                self.result_image_labels[tile_y_id][tile_x_id] = result_image_label
+
+        control_layout = QtWidgets.QHBoxLayout()
+        layout.addLayout(control_layout)
+
+        calibration_group_box = QtWidgets.QGroupBox('calibration')
+        control_layout.addWidget(calibration_group_box)
+
+        calibration_group_box_layout = QtWidgets.QHBoxLayout(calibration_group_box)
+
+        self.calibrate_button = QtWidgets.QPushButton('calibrate')
+        self.calibrate_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.calibrate_button.setFixedWidth(80)
+        self.calibrate_button.setCheckable(True)
+        self.calibrate_button.clicked.connect(self.toggle_calibration_start_stop)
+        calibration_group_box_layout.addWidget(self.calibrate_button)
+
+        calibration_button_layout = QtWidgets.QVBoxLayout()
+        calibration_group_box_layout.addLayout(calibration_button_layout)
+
+        self.save_calibration_button = QtWidgets.QPushButton('save calibration')
+        self.save_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.save_calibration_button.setFixedWidth(120)
+        self.save_calibration_button.setEnabled(False)
+        self.save_calibration_button.clicked.connect(self.save_calibration)
+        calibration_button_layout.addWidget(self.save_calibration_button)
+
+        self.load_calibration_button = QtWidgets.QPushButton('load calibration')
+        self.load_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.load_calibration_button.setFixedWidth(120)
+        self.load_calibration_button.clicked.connect(self.load_calibration)
+        calibration_button_layout.addWidget(self.load_calibration_button)
+
+        self.clear_calibration_button = QtWidgets.QPushButton('clear calibration')
+        self.clear_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.clear_calibration_button.setFixedWidth(120)
+        self.clear_calibration_button.setEnabled(False)
+        self.clear_calibration_button.clicked.connect(self.clear_calibration)
+        calibration_button_layout.addWidget(self.clear_calibration_button)
+
+        task_group_box = QtWidgets.QGroupBox('task')
+        control_layout.addWidget(task_group_box)
+
+        task_group_box_layout = QtWidgets.QHBoxLayout(task_group_box)
+
+        self.task_button = QtWidgets.QPushButton('start')
+        self.task_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_button.setFixedWidth(80)
+        self.task_button.setCheckable(True)
+        self.task_button.clicked.connect(self.toggle_task_start_stop)
+        task_group_box_layout.addWidget(self.task_button)
+
+        monitor_group_box = QtWidgets.QGroupBox('monitor')
+        control_layout.addWidget(monitor_group_box)
+
+        monitor_layout = QtWidgets.QVBoxLayout(monitor_group_box)
+
+        self.monitor_button= QtWidgets.QPushButton('monitor')
+        self.monitor_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.monitor_button.setFixedWidth(80)
+        self.monitor_button.setCheckable(True)
+        self.monitor_button.setChecked(True)
+        self.monitor_button.clicked.connect(self.toggle_monitor)
+        monitor_layout.addWidget(self.monitor_button)
+
+        self.save_image_button = QtWidgets.QPushButton('save image')
+        self.save_image_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.save_image_button.setFixedWidth(80)
+        self.save_image_button.clicked.connect(self.save_image)
+        monitor_layout.addWidget(self.save_image_button)
+
+        task_status_server_group_box = QtWidgets.QGroupBox('server')
+        control_layout.addWidget(task_status_server_group_box)
+
+        task_status_server_layout = QtWidgets.QVBoxLayout(task_status_server_group_box)
+
+        self.task_status_server_button = QtWidgets.QPushButton('server')
+        self.task_status_server_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_status_server_button.setFixedWidth(80)
+        self.task_status_server_button.setCheckable(True)
+        self.task_status_server_button.clicked.connect(self.toggle_task_status_server)
+        task_status_server_layout.addWidget(self.task_status_server_button)
+
+        task_status_server_port_layout = QtWidgets.QHBoxLayout()
+        task_status_server_layout.addLayout(task_status_server_port_layout)
+
+        self.task_status_server_port_label = QtWidgets.QLabel('port:')
+        task_status_server_port_layout.addWidget(self.task_status_server_port_label)
+
+        self.task_status_server_port_line_edit = QtWidgets.QLineEdit('8123')
+        self.task_status_server_port_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_status_server_port_line_edit.setFixedWidth(40)
+        task_status_server_port_layout.addWidget(self.task_status_server_port_line_edit)
+
         transform_group_box = QtWidgets.QGroupBox('transform')
-        transform_layout = QtWidgets.QHBoxLayout()
+        transform_group_box.setCheckable(True)
+        control_layout.addWidget(transform_group_box)
+
+        transform_layout = QtWidgets.QHBoxLayout(transform_group_box)
+
+        transform_button_layout = QtWidgets.QVBoxLayout()
+        transform_layout.addLayout(transform_button_layout)
+
+        self.save_transform_button = QtWidgets.QPushButton('save transform')
+        self.save_transform_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.save_transform_button.setFixedWidth(100)
+        self.save_transform_button.clicked.connect(self.save_transform)
+        transform_button_layout.addWidget(self.save_transform_button)
+
+        self.load_transform_button = QtWidgets.QPushButton('load transform')
+        self.load_transform_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.load_transform_button.setFixedWidth(100)
+        self.load_transform_button.clicked.connect(self.load_transform)
+        transform_button_layout.addWidget(self.load_transform_button)
+
         form_layout1 = QtWidgets.QFormLayout()
         transform_layout.addLayout(form_layout1)
         form_layout2 = QtWidgets.QFormLayout()
         transform_layout.addLayout(form_layout2)
-        transform_group_box.setLayout(transform_layout)
-        layout.addWidget(transform_group_box)
 
-        binarization_threshold_label = QtWidgets.QLabel('binarization_threshold:')
-        self.binarization_threshold_line_edit = QtWidgets.QLineEdit()
-        self.binarization_threshold_line_edit.setText('128')
-        self.binarization_threshold_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(binarization_threshold_label, self.binarization_threshold_line_edit)
-
-        filter_level_label = QtWidgets.QLabel('filter_level:')
-        self.filter_level_line_edit = QtWidgets.QLineEdit()
-        self.filter_level_line_edit.setText('4')
-        self.filter_level_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout2.addRow(filter_level_label, self.filter_level_line_edit)
-
-        bbox_label = QtWidgets.QLabel('bbox:')
+        self.bbox_label = QtWidgets.QLabel('bbox:')
         self.bbox_line_edit = QtWidgets.QLineEdit()
-        self.bbox_line_edit.setText('0,0,1,1')
         self.bbox_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(bbox_label, self.bbox_line_edit)
+        form_layout1.addRow(self.bbox_label, self.bbox_line_edit)
 
-        sphere_label = QtWidgets.QLabel('sphere:')
+        self.sphere_label = QtWidgets.QLabel('sphere:')
         self.sphere_line_edit = QtWidgets.QLineEdit()
-        self.sphere_line_edit.setText('0,0,0,0')
         self.sphere_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout2.addRow(sphere_label, self.sphere_line_edit)
+        form_layout1.addRow(self.sphere_label, self.sphere_line_edit)
 
-        quad_label = QtWidgets.QLabel('quad:')
-        self.quad_line_edit = QtWidgets.QLineEdit()
-        self.quad_line_edit.setText('0,0,0,0,0,0,0,0')
-        self.quad_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(quad_label, self.quad_line_edit)
+        self.filter_level_label = QtWidgets.QLabel('filter_level:')
+        self.filter_level_line_edit = QtWidgets.QLineEdit()
+        self.filter_level_line_edit.editingFinished.connect(self.transform_changed)
+        form_layout1.addRow(self.filter_level_label, self.filter_level_line_edit)
 
-        result_group_box = QtWidgets.QGroupBox('result')
-        result_layout = QtWidgets.QHBoxLayout()
-        self.result_label = QtWidgets.QLabel()
-        result_layout.addWidget(self.result_label)
-        result_group_box.setLayout(result_layout)
-        layout.addWidget(result_group_box)
+        self.binarization_threshold_label = QtWidgets.QLabel('binarization_threshold:')
+        self.binarization_threshold_line_edit = QtWidgets.QLineEdit()
+        self.binarization_threshold_line_edit.editingFinished.connect(self.transform_changed)
+        form_layout2.addRow(self.binarization_threshold_label, self.binarization_threshold_line_edit)
 
-        task_group_box = QtWidgets.QGroupBox('task')
-        task_layout = QtWidgets.QHBoxLayout()
-        self.task_label = QtWidgets.QLabel()
-        task_layout.addWidget(self.task_label)
-        task_group_box.setLayout(task_layout)
-        layout.addWidget(task_group_box)
+        self.pixelization_threshold_label = QtWidgets.QLabel('pixelization_threshold:')
+        self.pixelization_threshold_line_edit = QtWidgets.QLineEdit()
+        self.pixelization_threshold_line_edit.editingFinished.connect(self.transform_changed)
+        form_layout2.addRow(self.pixelization_threshold_label, self.pixelization_threshold_line_edit)
 
-        self.resize(1200, 650)
+        self.update_transform_ui(self.transform)
 
-        self.transform_changed()
+        status_group_box = QtWidgets.QGroupBox('status')
+        layout.addWidget(status_group_box)
 
-        self.show_image_t = threading.Thread(target=self.show_image)
-        self.show_image_t.start()
+        status_group_box_layout = QtWidgets.QHBoxLayout(status_group_box)
 
-        self.show_task_result_t = threading.Thread(target=self.show_task_result)
-        self.show_task_result_t.start()
+        result_frame = QtWidgets.QFrame()
+        result_frame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        result_frame.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        result_frame.setFixedWidth(50)
+        status_group_box_layout.addWidget(result_frame)
 
-    @QtCore.Slot()
-    def transform_changed(self):
-        transform = transform_utils.Transform()
-        transform.binarization_threshold = int(self.binarization_threshold_line_edit.text())
-        transform.filter_level = int(self.filter_level_line_edit.text())
-        transform.bbox = transform_utils.parse_bbox(self.bbox_line_edit.text())
-        transform.sphere = transform_utils.parse_sphere(self.sphere_line_edit.text())
-        transform.quad = transform_utils.parse_quad(self.quad_line_edit.text())
-        self.transform = transform
+        result_frame_layout = QtWidgets.QHBoxLayout(result_frame)
 
+        self.result_label = QtWidgets.QLabel('-')
+        result_frame_layout.addWidget(self.result_label)
+
+        status_frame = QtWidgets.QFrame()
+        status_frame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        status_group_box_layout.addWidget(status_frame)
+
+        status_frame_layout = QtWidgets.QHBoxLayout(status_frame)
+
+        self.status_label = QtWidgets.QLabel('-')
+        status_frame_layout.addWidget(self.status_label)
+
+        self.task_save_part_progress_bar = QtWidgets.QProgressBar()
+        self.task_save_part_progress_bar.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        self.task_save_part_progress_bar.setFixedWidth(500)
+        self.task_save_part_progress_bar.setFormat('%p%')
+        self.task_save_part_progress_bar.setRange(0, self.part_num)
+        status_group_box_layout.addWidget(self.task_save_part_progress_bar)
+
+        self.resize(1200, 600)
+
+    def start_calibration(self):
+        self.task_button.setEnabled(False)
+        self.clear_calibration_button.setEnabled(False)
+        self.save_calibration_button.setEnabled(False)
+        self.load_calibration_button.setEnabled(False)
+
+        with self.running_lock:
+            self.calibration_running = [True]
+
+        def get_transform_fn():
+            with self.transfrom_lock:
+                transform = self.transform.clone()
+            return transform
+
+        self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.calibration_running, self.running_lock, self.frame_q, 200))
+        self.fetch_image_thread.start()
+
+        calibrate_cb = lambda *args: self.send_calibration.emit(*args)
+        send_calibration_image_result_cb = lambda *args: self.send_calibration_image_result.emit(*args)
+        calibration_progress_cb = lambda *args: self.send_calibration_progress.emit(*args)
+        self.calibrate_thread = threading.Thread(target=self.image_decode_worker.calibrate_worker, args=(self.frame_q, self.dim, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb))
+        self.calibrate_thread.start()
+
+    def stop_calibration(self):
+        with self.running_lock:
+            self.calibration_running = [False]
+        self.fetch_image_thread.join()
+        self.fetch_image_thread = None
+        self.frame_q.put(None)
+        self.calibrate_thread.join()
+        self.calibrate_thread = None
+
+        self.task_button.setEnabled(True)
+        self.load_calibration_button.setEnabled(True)
+        if self.calibration.valid:
+            self.clear_calibration_button.setEnabled(True)
+            self.save_calibration_button.setEnabled(True)
+        self.clear_status()
+
+    def save_calibration(self):
+        self.calibration.Save(self.output_file + '.calibration')
+
+    def load_calibration(self):
+        calibration_path = self.output_file + '.calibration'
+        if os.path.isfile(calibration_path):
+            self.calibration.load(calibration_path)
+            if self.calibration.valid:
+                self.clear_calibration_button.setEnabled(True)
+                self.save_calibration_button.setEnabled(True)
+        else:
+            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find calibration file \'{}\''.format(calibration_path), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+
+    def clear_calibration(self):
+        self.calibration.valid = False
+        self.clear_calibration_button.setEnabled(False)
+        self.save_calibration_button.setEnabled(False)
+
+    def start_task(self):
+        self.calibrate_button.setEnabled(False)
+        self.clear_calibration_button.setEnabled(False)
+        self.save_calibration_button.setEnabled(False)
+        self.load_calibration_button.setEnabled(False)
+
+        with self.running_lock:
+            self.task_running[0] = True
+
+        def get_transform_fn():
+            with self.transfrom_lock:
+                transform = self.transform.clone()
+            return transform
+
+        self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.task_running, self.running_lock, self.frame_q, 25))
+        self.fetch_image_thread.start()
         for i in range(self.mp):
-            self.transform_q.put(transform)
+            t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration))
+            t.start()
+            self.decode_image_threads.append(t)
 
-    def show_image(self):
-        while True:
-            data = self.frame_q.get()
-            if data is None:
-                break
-            frame_id, frame = data
-            with PIL.Image.fromarray(frame) as img:
-                self.image_label.setPixmap(QtGui.QPixmap.fromImage(PIL.ImageQt.ImageQt(img)))
-                success, part_id, part_bytes, result_img = image_decoder.decode_image(img, self.row_num, self.col_num, self.transform, result_image=True)
-                self.result_image_label.setPixmap(QtGui.QPixmap.fromImage(PIL.ImageQt.ImageQt(result_img)))
-                self.result_label.setText('pass' if success else 'fail')
-            time.sleep(0.2)
+        send_decode_image_result_cb = lambda *args: self.send_decode_image_result.emit(*args)
+        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration, send_decode_image_result_cb, 300))
+        self.decode_image_result_thread.start()
 
-    def show_task_result(self):
-        while True:
-            result = self.task_result_q.get()
-            if result is None:
-                break
-            done_part_num, part_num, frame_num = result
-            self.task_label.setText('{}/{} parts transferred, {} frames processed'.format(done_part_num, part_num, frame_num))
+        send_auto_transform_cb = lambda *args: self.send_auto_transform.emit(*args)
+        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration, send_auto_transform_cb, 300))
+        self.auto_transform_thread.start()
 
-    def stop_threads(self):
-        self.show_image_t.join()
-        self.show_task_result_t.join()
+        save_part_progress_cb = lambda *args: self.send_save_part_progress.emit(*args)
+        save_part_complete_cb = lambda *args: self.send_save_part_complete.emit(*args)
+        save_part_error_cb = lambda *args: self.send_save_part_error.emit(*args)
+        finalization_start_cb = lambda *args: self.send_finalization_start.emit(*args)
+        finalization_progress_cb = lambda *args: self.send_finalization_progress.emit(*args)
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.dim, self.pixel_size, self.space_size, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
+        self.save_part_thread.start()
 
-def capture_image_worker(frame_q, stop_q):
-    url = 0
-    #url = 'http://192.168.10.108:8080/video'
-    capture = cv2.VideoCapture(url)
-    #width, height = capture.get(3), capture.get(4)
-    #capture.set(cv2.CAP_PROP_FRAME_WIDTH, width)
-    #capture.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
-    #print(width, height)
+    def stop_task(self):
+        with self.running_lock:
+            self.task_running[0] = False
+        self.fetch_image_thread.join()
+        self.fetch_image_thread = None
+        for i in range(self.mp + 2):
+            self.frame_q.put(None)
+        for t in self.decode_image_threads:
+            t.join()
+        self.decode_image_threads.clear()
+        self.decode_image_result_thread.join()
+        self.decode_image_result_thread = None
+        self.auto_transform_thread.join()
+        self.auto_transform_thread = None
+        self.part_q.put(None)
+        self.save_part_thread.join()
+        self.save_part_thread = None
 
-    frame_id = 0
-    while True:
-        ret, frame = capture.read()
-        frame_q.put((frame_id, frame))
-        if frame_id % 10 == 0:
+        self.calibrate_button.setEnabled(True)
+        self.load_calibration_button.setEnabled(True)
+        if self.calibration.valid:
+            self.clear_calibration_button.setEnabled(True)
+            self.save_calibration_button.setEnabled(True)
+        self.clear_status()
+
+    def toggle_calibration_start_stop(self):
+        with self.running_lock:
+            calibration_running = self.calibration_running[0]
+        if calibration_running:
+            self.stop_calibration()
+        else:
+            self.start_calibration()
+
+    def toggle_task_start_stop(self):
+        with self.running_lock:
+            task_running = self.task_running[0]
+        if task_running:
+            self.stop_task()
+        else:
+            self.start_task()
+
+    def clear_status(self):
+        self.clear_images()
+        self.result_label.setText('-')
+        self.status_label.setText('-')
+        self.task_save_part_progress_bar.setValue(0)
+
+    def clear_images(self):
+        self.image_label.clear()
+        for e1 in self.result_image_labels:
+            for e2 in e1:
+                e2.clear()
+
+    def toggle_monitor(self):
+        self.monitor_on = not self.monitor_on
+        if not self.monitor_on:
+            self.clear_images()
+        self.save_image_button.setEnabled(self.monitor_on)
+
+    def save_image(self):
+        if self.image:
+            cv2.imwrite(self.output_file + '.transformed_image.bmp', self.image)
+        for tile_y_id in range(self.tile_y_num):
+            for tile_x_id in range(self.tile_x_num):
+                if self.result_images[tile_y_id][tile_x_id]:
+                    cv2.imwrite('{}.result_image_{}_{}.bmp'.format(self.output_file, tile_x_id, tile_y_id), self.result_images[tile_y_id][tile_x_id])
+
+    def toggle_task_status_server(self):
+        if self.task_status_server_on:
+            self.task_status_server.stop()
+            self.task_status_server_on = False
+            self.task_status_server_port_line_edit.setEnabled(True)
+        else:
+            port = -1
             try:
-                stop_q.get(False)
-                break
-            except queue.Empty:
-                pass
-        frame_id += 1
-        cv2.waitKey(100)
+                port = image_decode_task_status_server.parse_task_status_server_port(self.task_status_server_port_line_edit.text())
+            except image_codec_types.InvalidImageCodecArgument:
+                QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server port \'{}\''.format(self.task_status_server_port_line_edit.text()), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+            if port > 0:
+                self.task_status_server.start(port)
+                self.task_status_server_on = True
+                self.task_status_server_port_line_edit.setEnabled(False)
 
-def decode_image_worker(part_q, frame_q, transform_q, image_dir_path, row_num, col_num):
-    transform = transform_utils.Transform()
-    while True:
+    def save_transform(self):
+        with self.transfrom_lock:
+            self.transform.save(self.output_file + '.transform')
+
+    def load_transform(self):
+        transform_path = self.output_file + '.transform'
+        if os.path.isfile(transform_path):
+            with self.transfrom_lock:
+                self.transform.load(transform_path)
+            self.update_transform_ui(self.transform)
+        else:
+            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find transform file \'{}\''.format(transform_path), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+
+    def update_transform(self, transform):
+        with self.transfrom_lock:
+            self.transform = transform
+
+    def update_transform_ui(self, transform):
+        self.bbox_line_edit.setText(transform_utils.get_bbox_str(transform.bbox))
+        self.sphere_line_edit.setText(transform_utils.get_sphere_str(transform.sphere))
+        self.filter_level_line_edit.setText(transform_utils.get_filter_level_str(transform.filter_level))
+        self.binarization_threshold_line_edit.setText(transform_utils.get_binarization_threshold_str(transform.binarization_threshold))
+        self.pixelization_threshold_line_edit.setText(transform_utils.get_pixelization_threshold_str(transform.pixelization_threshold))
+
+    def receive_calibration(self, calibration):
+        self.calibration = calibration
+
+    def show_result(self, img, success, result_imgs):
+        with self.running_lock:
+            running = self.calibration_running[0] or self.task_running[0]
+        if running:
+            self.image = img
+            if self.monitor_on:
+                self.image_label.setPixmap(QtGui.QPixmap.fromImage(QtGui.QImage(img.data, img.shape[1], img.shape[0], img.shape[1] * img.shape[2], QtGui.QImage.Format_BGR888)))
+            for tile_y_id in range(self.tile_y_num):
+                for tile_x_id in range(self.tile_x_num):
+                    result_img = result_imgs[tile_y_id][tile_x_id]
+                    self.result_images[tile_y_id][tile_x_id] = result_img
+                    if self.monitor_on:
+                        self.result_image_labels[tile_y_id][tile_x_id].setPixmap(QtGui.QPixmap.fromImage(QtGui.QImage(result_img.data, result_img.shape[1], result_img.shape[0], result_img.shape[1] * result_img.shape[2], QtGui.QImage.Format_BGR888)))
+            self.result_label.setText('pass' if success else  'fail')
+
+    def show_calibration_progress(self, calibration_progress):
+        with self.running_lock:
+            calibration_running = self.calibration_running[0]
+        if calibration_running:
+            s = '{} frames processed, fps={:.2f}'.format(calibration_progress.frame_num, calibration_progress.fps)
+            self.status_label.setText(s)
+
+    def show_task_save_part_progress(self, task_save_part_progress):
+        with self.running_lock:
+            task_running = self.task_running[0]
+        if task_running:
+            s = '{} frames processed, {}/{} parts transferred, fps={:.2f}, done_fps={:.2f}, bps={:.0f}, left_time={:0>2d}d{:0>2d}h{:0>2d}m{:0>2d}s'.format(task_save_part_progress.frame_num, task_save_part_progress.done_part_num, task_save_part_progress.part_num, task_save_part_progress.fps, task_save_part_progress.done_fps, task_save_part_progress.bps, task_save_part_progress.left_days, task_save_part_progress.left_hours, task_save_part_progress.left_minutes, task_save_part_progress.left_seconds)
+            self.status_label.setText(s)
+            self.task_save_part_progress_bar.setValue(task_save_part_progress.done_part_num)
+
+    def transform_changed(self):
         try:
-            transform = transform_q.get(False)
-        except queue.Empty:
+            transform = transform_utils.Transform()
+            transform.bbox = transform_utils.parse_bbox(self.bbox_line_edit.text())
+            transform.sphere = transform_utils.parse_sphere(self.sphere_line_edit.text())
+            transform.filter_level = transform_utils.parse_filter_level(self.filter_level_line_edit.text())
+            transform.binarization_threshold = transform_utils.parse_binarization_threshold(self.binarization_threshold_line_edit.text())
+            transform.pixelization_threshold = transform_utils.parse_pixelization_threshold(self.pixelization_threshold_line_edit.text())
+            self.update_transform(transform)
+        except image_codec_types.InvalidImageCodecArgument as e:
             pass
-        data = frame_q.get()
-        if data is None:
-            break
-        frame_id, frame = data
-        with PIL.Image.fromarray(frame) as img:
-            if image_dir_path:
-                img.save(os.path.join(image_dir_path, '{}.jpg'.format(frame_id)))
-            success, part_id, part_bytes, result_img = image_decoder.decode_image(img, row_num, col_num, transform)
-        part_q.put((success, part_id, part_bytes))
 
-def save_part_worker(stop_q, task_result_q, part_q, output_file, row_num, col_num, part_num):
-    task = image_decode_task.Task()
-    task_file = output_file + '.task'
-    if os.path.isfile(task_file):
-        task.load(task_file)
-        assert row_num == task.row_num, 'inconsistent task'
-        assert col_num == task.col_num, 'inconsistent task'
-        assert part_num == task.part_num, 'inconsistent task'
-    else:
-        task.init(row_num, col_num, part_num)
+    def update_auto_transform(self, transform):
+        self.update_transform(transform)
+        self.update_transform_ui(transform)
 
-    mode = 'r+b' if os.path.isfile(output_file) else 'w+b'
-    with open(output_file, mode) as f:
-        frame_num = 0
-        while True:
-            part = part_q.get()
-            if part is None:
-                break
-            success, part_id, part_bytes = part
-            if success and not task.test_part_done(part_id):
-                f.seek(part_id * len(part_bytes), io.SEEK_SET)
-                f.write(part_bytes)
-                task.set_part_done(part_id)
-            frame_num += 1
-            task_result_q.put((task.done_part_num, task.part_num, frame_num))
-            if task.done_part_num == task.part_num:
-                stop_q.put(None)
-                break
-        print(file=sys.stderr)
+    def task_save_part_complete(self):
+        self.stop_task()
+        self.task_button.setChecked(False)
+        QtWidgets.QMessageBox.information(self, 'Info', 'transfer done', QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+        #self.close()
 
-        task.save(task_file)
+    def task_finalization_start(self, finalization_progress):
+        #self.task_finalization_progress_dialog = QtWidgets.QProgressDialog('finalizing task', '', finalization_progress.done_block_num, finalization_progress.block_num, this)
+        #self.task_finalization_progress_dialog.setMinimumDuration(0)
+        #self.task_finalization_progress_dialog.setWindowModality(QtCore.Qt.WindowModal)
+        pass
 
-        if task.done_part_num == task.part_num:
-            merge_parts.truncate_file(f)
-            os.remove(task_file)
-            print('transfer done', file=sys.stderr)
+    def task_finalization_progress(self, finalization_progress):
+        #self.task_finalization_progress_dialog.setValue(finalization_progress.done_block_num)
+        pass
+
+    def error_msg(self, msg):
+        QtWidgets.QMessageBox.critical(self, 'Error', msg, QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+        self.close()
+
+    def closeEvent(self, event):
+        with self.running_lock:
+            calibration_running = self.calibration_running[0]
+            task_running = self.task_running[0]
+        if calibration_running:
+            self.stop_calibration()
+        if task_running:
+            self.stop_task()
 
 if __name__ == '__main__':
     import argparse
 
     parser = argparse.ArgumentParser()
     parser.add_argument('output_file', help='output file')
-    parser.add_argument('dim', help='dim as row_num,col_num')
+    parser.add_argument('dim', help='dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size')
+    parser.add_argument('pixel_type', help='pixel type')
+    parser.add_argument('pixel_size', type=int, help='pixel size')
+    parser.add_argument('space_size', type=int, help='space size')
     parser.add_argument('part_num', type=int, help='part num')
-    parser.add_argument('--image_dir_path', help='image dir path')
     parser.add_argument('--mp', type=int, default=1, help='multiprocessing')
     args = parser.parse_args()
 
-    row_num, col_num = image_decoder.parse_dim(args.dim)
-
-    frame_q = multiprocessing.Queue(20)
-    part_q = multiprocessing.Queue(20)
-    stop_q = multiprocessing.Queue(1)
-    transform_q = multiprocessing.Queue(args.mp * 2)
-    task_result_q = multiprocessing.Queue(5)
-
-    capture_image_p = multiprocessing.Process(target=capture_image_worker, args=(frame_q, stop_q))
-    capture_image_p.start()
-
-    decode_image_ps = []
-    for i in range(args.mp):
-        decode_image_ps.append(multiprocessing.Process(target=decode_image_worker, args=(part_q, frame_q, transform_q, args.image_dir_path, row_num, col_num)))
-    for e in decode_image_ps:
-        e.start()
-
-    save_part_p = multiprocessing.Process(target=save_part_worker, args=(stop_q, task_result_q, part_q, args.output_file, row_num, col_num, args.part_num))
-    save_part_p.start()
+    dim = image_codec_types.parse_dim(args.dim)
+    pixel_type = image_codec_types.parse_pixel_type(args.pixel_type)
 
     app = QtWidgets.QApplication([])
-    widget = MyWidget(transform_q, args.mp, frame_q, task_result_q, row_num, col_num)
+    widget = Widget(args.output_file, dim, pixel_type, args.pixel_size, args.space_size, args.part_num, args.mp)
     widget.show()
-    exit_v = app.exec()
-
-    stop_q.put(None)
-    capture_image_p.join()
-    for i in range(args.mp + 1):
-        frame_q.put(None)
-    for e in decode_image_ps:
-        e.join()
-    task_result_q.put(None)
-    widget.stop_threads()
-    part_q.put(None)
-    save_part_p.join()
-
-    sys.exit(exit_v)
+    sys.exit(app.exec())

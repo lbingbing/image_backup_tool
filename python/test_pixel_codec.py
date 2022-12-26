@@ -1,9 +1,10 @@
 import sys
 
+import image_codec_types
 import pixel_codec
 
 def test_pixel_codec(pixel_type_str):
-    pixel_codec1 = pixel_codec.create_pixel_codec(pixel_codec.parse_pixel_type(pixel_type_str))
+    pixel_codec1 = pixel_codec.create_pixel_codec(image_codec_types.parse_pixel_type(pixel_type_str))
     for i in range(128):
         b = bytes([j % 256 for j in range(i + 1)])
         for j in range(16):

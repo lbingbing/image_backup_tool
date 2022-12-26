@@ -98,9 +98,9 @@ cv::Mat do_sphere(const cv::Mat& img, const std::vector<float>& sphere) {
     auto cols1 = img.cols - cols0;
     auto rows1 = img.rows - rows0;
     cv::Mat img_nw = img(cv::Rect(0, 0, cols0, rows0));
-    cv::Mat img_sw = img(cv::Rect(0, rows0, cols1, rows1));
+    cv::Mat img_sw = img(cv::Rect(0, rows0, cols0, rows1));
     cv::Mat img_se = img(cv::Rect(cols0, rows0, cols1, rows1));
-    cv::Mat img_ne = img(cv::Rect(cols0, 0, cols1, rows1));
+    cv::Mat img_ne = img(cv::Rect(cols0, 0, cols1, rows0));
     std::vector<cv::Point2f> src_corners_nw{
         {0.f, 0.f},
         {-sphere[0] * cols0, static_cast<float>(rows0)},

@@ -324,9 +324,9 @@ cv::Mat get_result_image(const cv::Mat& img, int tile_x_size, int tile_y_size, c
         cv::line(img1, cv::Point(x0, y), cv::Point(x1, y), cv::Scalar(0, 0, 255));
     }
     for (int j = 0; j <= tile_x_size; ++j) {
-        int x = static_cast<int>(bbox2[0] + j * unit_w);
+        int x = static_cast<int>(round(bbox2[0] + j * unit_w));
         int y0 = static_cast<int>(bbox2[1]);
-        int y1 = static_cast<int>(bbox2[1] + tile_y_size * unit_h);
+        int y1 = static_cast<int>(round(bbox2[1] + tile_y_size * unit_h));
         cv::line(img1, cv::Point(x, y0), cv::Point(x, y1), cv::Scalar(0, 0, 255));
     }
     cv::rectangle(img1, cv::Point(bbox1[0], bbox1[1]), cv::Point(bbox1[2], bbox1[3]), cv::Scalar(0, 0, 255));

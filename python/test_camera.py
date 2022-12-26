@@ -1,5 +1,4 @@
 import cv2
-import PIL.Image
 
 url = 1
 #url = 'http://192.168.31.216:8080/video'
@@ -19,5 +18,4 @@ while not stop:
             stop = True
             break
         elif key == ord('s'):
-            img = PIL.Image.fromarray(frame)
-            img.save('z.jpg')
+            cv2.imwrite('z.jpg', frame)

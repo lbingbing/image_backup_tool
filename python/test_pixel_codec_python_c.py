@@ -1,10 +1,11 @@
 import sys
 import ctypes
 
+import image_codec_types
 import pixel_codec
 
 def test_pixel_codec(pixel_type_str):
-    pixel_codec_p = pixel_codec.create_pixel_codec(pixel_codec.parse_pixel_type(pixel_type_str))
+    pixel_codec_p = pixel_codec.create_pixel_codec(image_codec_types.parse_pixel_type(pixel_type_str))
     clib = ctypes.cdll.LoadLibrary('./image_codec.dll')
     clib.create_pixel_codec_c.restype = ctypes.c_void_p
     pixel_codec_c = clib.create_pixel_codec_c(pixel_type_str.encode())
