@@ -163,9 +163,9 @@ cv::Mat do_sphere(const cv::Mat& img, const std::vector<float>& sphere) {
     cv::warpPerspective(img_ne, img_ne1, mat_ne, img_ne.size(), cv::INTER_NEAREST, cv::BORDER_CONSTANT, cv::Scalar(255, 255, 255));
     cv::Mat img1(img.rows, img.cols, img.type());
     img_nw1.copyTo(img1(cv::Rect(0, 0, cols0, rows0)));
-    img_sw1.copyTo(img1(cv::Rect(0, rows0, cols1, rows1)));
+    img_sw1.copyTo(img1(cv::Rect(0, rows0, cols0, rows1)));
     img_se1.copyTo(img1(cv::Rect(cols0, rows0, cols1, rows1)));
-    img_ne1.copyTo(img1(cv::Rect(cols0, 0, cols1, rows1)));
+    img_ne1.copyTo(img1(cv::Rect(cols0, 0, cols1, rows0)));
     return img1;
 }
 
