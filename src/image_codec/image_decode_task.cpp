@@ -71,6 +71,26 @@ void Task::UpdatePart(uint32_t part_id, const Bytes& part_bytes) {
     }
 }
 
+Bytes Task::ToTaskBytes() const {
+    Bytes bytes;
+    const uint8_t* ptr = nullptr;
+    ptr = reinterpret_cast<const uint8_t*>(&m_dim);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(Dim));
+    int pixel_type = static_cast<int>(m_pixel_type);
+    ptr = reinterpret_cast<const uint8_t*>(&pixel_type);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(pixel_type));
+    ptr = reinterpret_cast<const uint8_t*>(&m_pixel_size);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_pixel_size));
+    ptr = reinterpret_cast<const uint8_t*>(&m_space_size);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_space_size));
+    ptr = reinterpret_cast<const uint8_t*>(&m_part_num);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_part_num));
+    ptr = reinterpret_cast<const uint8_t*>(&m_done_part_num);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_done_part_num));
+    bytes.insert(bytes.end(), m_task_status_bytes.begin(), m_task_status_bytes.end());
+    return bytes;
+}
+
 void Task::Flush() {
     std::fstream blob_file(m_blob_path, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
     for (const auto& [part_id, part_bytes] : m_blob_buf) {

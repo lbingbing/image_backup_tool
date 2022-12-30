@@ -215,7 +215,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
             if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
         }
         if (task_status_server && (task_status_server->NeedUpdateTaskStatus() || (task_status_server->IsRunning() && (frame_num & 0xff) == 0))) {
-            task_status_server->UpdateTaskStatus(task.GetTaskStatusBytes());
+            task_status_server->UpdateTaskStatus(task.ToTaskBytes());
         }
         if (task.IsDone()) {
             if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});

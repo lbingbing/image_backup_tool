@@ -237,7 +237,7 @@ class ImageDecodeWorker:
                     save_part_progress.left_seconds = left_seconds
                     save_part_progress_cb(save_part_progress)
             if task_status_server and (task_status_server.need_update_task_status() or (task_status_server.is_running() and frame_num & 0xff == 0)):
-                task_status_server.update_task_status(task.get_task_status_bytes())
+                task_status_server.update_task_status(task.to_task_bytes())
             if task.is_done():
                 if save_part_progress_cb:
                     save_part_progress = SavePartProgress()

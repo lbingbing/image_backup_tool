@@ -575,8 +575,14 @@ class TaskPage(QtWidgets.QWidget):
         self.cur_part_id_spin_box.setValue(cur_part_id)
 
     def fetch_task_status(self):
-        task_status_bytes = self.task_status_client.get_task_status()
-        if task_status_bytes:
+        task_bytes = self.task_status_client.get_task_status()
+        if task_bytes:
+            dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+            assert dim == (self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size)
+            assert pixel_type == self.context.pixel_type
+            assert pixel_size == self.context.pixel_size
+            assert space_size == self.context.space_size
+            assert part_num == self.part_num
             assert len(task_status_bytes) == (self.part_num + 7) // 8
             self.undone_part_ids = [part_id for part_id in range(self.part_num) if not image_decode_task.is_part_done(task_status_bytes, part_id)]
             self.cur_undone_part_id_index = 0

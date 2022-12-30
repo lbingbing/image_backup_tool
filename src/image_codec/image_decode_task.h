@@ -37,7 +37,7 @@ public:
     int GetPixelSize() const { return m_pixel_size; }
     int GetSpaceSize() const { return m_space_size; }
     uint32_t GetPartNum() const { return m_part_num; }
-    const Bytes& GetTaskStatusBytes() const { return m_task_status_bytes; }
+    Bytes ToTaskBytes() const;
 
 private:
     IMAGE_CODEC_API bool IsPartDone(uint32_t part_id) const;

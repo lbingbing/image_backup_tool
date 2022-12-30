@@ -1,6 +1,7 @@
 import os
 import struct
 
+import image_codec_types
 import pixel_codec
 
 class FinalizationProgress:
@@ -36,7 +37,7 @@ class Task:
             task_bytes = task_file.read()
         *dim, pixel_type, self.pixel_size, self.space_size, self.part_num, self.done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
         self.dim = tuple(dim)
-        self.pixel_type = pixel_codec.PixelType(pixel_type)
+        self.pixel_type = image_codec_types.PixelType(pixel_type)
         self.task_status_bytes = bytearray(task_bytes[36:])
 
     def set_finalization_cb(self, finalization_start_cb, finalization_progress_cb, finalization_complete_cb):
@@ -51,18 +52,6 @@ class Task:
             part_byte_num = get_part_byte_num(*self.dim, self.pixel_type)
             blob_file.truncate(part_byte_num * self.part_num)
         return True
-
-    def flush(self):
-        with open(self.blob_path, 'r+b') as blob_file:
-            for part_id, part_bytes in self.blob_buf:
-                blob_file.seek(part_id * len(part_bytes))
-                blob_file.write(part_bytes)
-        self.blob_buf = []
-
-        with open(self.task_path, 'wb') as task_file:
-            task_info_bytes = struct.pack('<IIIIIIIII', *self.dim, self.pixel_type.value, self.pixel_size, self.space_size, self.part_num, self.done_part_num)
-            task_file.write(task_info_bytes)
-            task_file.write(self.task_status_bytes)
 
     def is_part_done(self, part_id):
         byte_index = part_id // 8
@@ -82,6 +71,22 @@ class Task:
 
         if (self.done_part_num & 0xff) == 0:
             self.flush()
+
+    def to_task_bytes(self):
+        task_info_bytes = struct.pack('<IIIIIIIII', *self.dim, self.pixel_type.value, self.pixel_size, self.space_size, self.part_num, self.done_part_num)
+        return task_info_bytes + self.task_status_bytes
+
+    def flush(self):
+        with open(self.blob_path, 'r+b') as blob_file:
+            for part_id, part_bytes in self.blob_buf:
+                blob_file.seek(part_id * len(part_bytes))
+                blob_file.write(part_bytes)
+        self.blob_buf = []
+
+        with open(self.task_path, 'wb') as task_file:
+            task_info_bytes = struct.pack('<IIIIIIIII', *self.dim, self.pixel_type.value, self.pixel_size, self.space_size, self.part_num, self.done_part_num)
+            task_file.write(task_info_bytes)
+            task_file.write(self.task_status_bytes)
 
     def is_done(self):
         return self.done_part_num == self.part_num
@@ -126,6 +131,13 @@ def get_task_bytes(file_path, part_byte_num):
     raw_bytes = file_bytes + padding_bytes1 + size_bytes + padding_bytes2
     part_num = len(raw_bytes) // part_byte_num
     return raw_bytes, part_num
+
+def from_task_bytes(task_bytes):
+    *dim, pixel_type, pixel_size, space_size, part_num, done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
+    dim = tuple(dim)
+    pixel_type = image_codec_types.PixelType(pixel_type)
+    task_status_bytes = task_bytes[36:]
+    return dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes
 
 def is_part_done(task_status_bytes, part_id):
     byte_index = part_id // 8

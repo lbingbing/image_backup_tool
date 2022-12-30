@@ -18,7 +18,7 @@ class TaskStatusServer:
         self.worker_thread = None
         self.running = False
         self.need_update_task_status = False
-        self.task_status_bytes = b''
+        self.task_bytes = b''
         self.lock = threading.Lock()
 
     def close(self):
@@ -33,14 +33,14 @@ class TaskStatusServer:
             try:
                 with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                     s.connect(('127.0.0.1', self.port))
-                    task_status_byte_len_bytes = 0
-                    while len(task_status_byte_len_bytes) < 8:
-                        task_status_byte_len_bytes += s.recv(8 - len(task_status_byte_len_bytes))
-                    task_status_byte_len = struct.unpack('<Q', task_status_byte_len_bytes)[0]
-                    if task_status_byte_len:
-                        task_status_bytes = bytearray()
-                        while len(task_status_bytes) < task_status_byte_len:
-                            task_status_bytes += s.recv(task_status_byte_len - len(task_status_bytes))
+                    task_byte_len_bytes = 0
+                    while len(task_byte_len_bytes) < 8:
+                        task_byte_len_bytes += s.recv(8 - len(task_byte_len_bytes))
+                    task_byte_len = struct.unpack('<Q', task_byte_len_bytes)[0]
+                    if task_byte_len:
+                        task_bytes = bytearray()
+                        while len(task_bytes) < task_byte_len:
+                            task_bytes += s.recv(task_byte_len - len(task_bytes))
             except Exception:
                 pass
             self.worker_thread.join()
@@ -63,18 +63,18 @@ class TaskStatusServer:
                     s.bind(('', port))
                     s.listen(1)
                     conn, addr = s.accept()
-                    task_status_bytes = b''
+                    task_bytes = b''
                     with self.lock:
-                        task_status_bytes = bytes(self.task_status_bytes)
-                    task_status_byte_len = len(task_status_bytes)
-                    task_status_byte_len_bytes = struct.pack('<Q', task_status_byte_len)
-                    conn.sendall(task_status_byte_len_bytes)
-                    if task_status_byte_len:
-                        conn.sendall(task_status_bytes)
+                        task_bytes = bytes(self.task_bytes)
+                    task_byte_len = len(task_bytes)
+                    task_byte_len_bytes = struct.pack('<Q', task_byte_len)
+                    conn.sendall(task_byte_len_bytes)
+                    if task_byte_len:
+                        conn.sendall(task_bytes)
             except Exception:
                 pass
 
-    def update_task_status(self, task_status_bytes):
+    def update_task_status(self, task_bytes):
         with self.lock:
-            self.task_status_bytes = bytes(task_status_bytes)
+            self.task_bytes = bytes(task_bytes)
             self.need_update_task_status = False

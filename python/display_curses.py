@@ -248,11 +248,15 @@ class App:
             time.sleep(INTERVAL)
 
     def update_task_status(self):
-        task_status_file_path = self.target_file_path + '.task_status_bytes'
+        task_status_file_path = self.target_file_path + '.task'
         if os.path.isfile(task_status_file_path):
             with open(task_status_file_path, 'rb') as f:
-                task_status_bytes = f.read()
-            if task_status_bytes:
+                task_bytes = f.read()
+            if task_bytes:
+                dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+                assert dim == (self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size)
+                assert pixel_type == self.pixel_type
+                assert part_num == self.part_num
                 assert len(task_status_bytes) == (self.part_num + 7) // 8
                 self.undone_part_ids = [part_id for part_id in range(self.part_num) if not image_decode_task.is_part_done(task_status_bytes, part_id)]
                 assert self.undone_part_ids
