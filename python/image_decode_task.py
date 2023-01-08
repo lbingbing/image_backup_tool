@@ -14,6 +14,8 @@ def get_part_byte_num(tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_ty
     return tile_x_num * tile_y_num * tile_x_size * tile_y_size * codec.bit_num_per_pixel // 8 - codec.meta_byte_num
 
 class Task:
+    min_part_byte_num = 8
+
     def __init__(self, path):
         self.path = path
         self.task_path = path + '.task'

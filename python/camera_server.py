@@ -121,7 +121,7 @@ class App:
 
 def start_server(port, process):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("1.1.1.1", 80))
+        s.connect(('1.1.1.1', 80))
         ip = s.getsockname()[0]
     print('Serving Camera on {}:{}'.format(ip, port))
     app = App(process)
@@ -130,7 +130,7 @@ def start_server(port, process):
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nKeyboard interrupt received, exiting.")
+        print('\nKeyboard interrupt received, exiting.')
         httpd.server_close()
 
 class PipeCb:

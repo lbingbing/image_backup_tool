@@ -127,8 +127,9 @@ class ImageDecodeWorker:
                     sum1 += pixelization_threshold_scores[threshold] * threshold
                 if total_score > 0:
                     threshold = round(sum1 / total_score)
-                    transform.pixelization_threshold = (threshold, ) * 3
-                    send_auto_trasform_cb(transform)
+                    transform1 = transform.clone()
+                    transform1.pixelization_threshold = (threshold, ) * 3
+                    send_auto_trasform_cb(transform1)
             time.sleep(interval / 1000)
 
     def save_part_worker(self, running, running_lock, part_q, output_file, dim, pixel_size, space_size, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server):
@@ -182,7 +183,7 @@ class ImageDecodeWorker:
         done_part_num0 = task.done_part_num
         bps = 0
         tile_x_num, tile_y_num, tile_x_size, tile_y_size = dim
-        bpf = tile_x_num * tile_y_num * tile_x_size * tile_y_size * self.image_decoder.pixel_codec.bit_num_per_pixel / 8
+        bpf = image_decode_task.get_part_byte_num(tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type)
         left_days = 0
         left_hours = 0
         left_minutes = 0
@@ -198,7 +199,7 @@ class ImageDecodeWorker:
             frame_num += 1
             if frame_num & 0x7f == 0:
                 t1 = time.time()
-                delta_t = t1 - t0
+                delta_t = max(t1 - t0, 0.001)
                 t0 = t1
                 delta_frame_num = frame_num - frame_num0
                 frame_num0 = frame_num

@@ -34,5 +34,8 @@ if __name__ == '__main__':
 
     task_status_client = TaskStatusClient(args.ip, args.port)
     task_bytes = task_status_client.get_task_status()
-    with open(args.target_file_path+'.task', 'wb') as f:
-        f.write(task_bytes)
+    if task_bytes is None:
+        print('fail to get task status')
+    else:
+        with open(args.target_file_path+'.task', 'wb') as f:
+            f.write(task_bytes)

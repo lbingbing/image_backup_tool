@@ -19,7 +19,7 @@ public:
     virtual PixelType GetPixelType() = 0;
     virtual int PixelValueNum() = 0;
     virtual int BitNumPerPixel() = 0;
-    IMAGE_CODEC_API Pixels Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_num);
+    IMAGE_CODEC_API Pixels Encode(uint32_t part_id, const Bytes& part_bytes, int frame_size);
     IMAGE_CODEC_API DecodeResult Decode(const Pixels& pixels);
 
 protected:

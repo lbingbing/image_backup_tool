@@ -19,14 +19,14 @@ IMAGE_CODEC_API void* create_pixel_codec_c(char* pixel_type_str) {
     }
 }
 
-IMAGE_CODEC_API void pixel_codec_encode_c(void* pixel_codec, Pixel* pixels, uint32_t part_id, Byte* part_bytes, size_t part_byte_num, int pixel_num) {
+IMAGE_CODEC_API void pixel_codec_encode_c(void* pixel_codec, Pixel* pixels, uint32_t part_id, Byte* part_bytes, size_t part_byte_num, int frame_size) {
     Bytes part_bytes1(part_bytes, part_bytes+part_byte_num);
-    Pixels pixels1 = reinterpret_cast<PixelCodec*>(pixel_codec)->Encode(part_id, part_bytes1, pixel_num);
-    std::copy_n(pixels1.data(), pixel_num, pixels);
+    Pixels pixels1 = reinterpret_cast<PixelCodec*>(pixel_codec)->Encode(part_id, part_bytes1, frame_size);
+    std::copy_n(pixels1.data(), frame_size, pixels);
 }
 
-IMAGE_CODEC_API void pixel_codec_decode_c(void* pixel_codec, bool* success, uint32_t* part_id, Byte* part_bytes, Pixel* pixels, int pixel_num) {
-    Pixels pixels1(pixels, pixels+pixel_num);
+IMAGE_CODEC_API void pixel_codec_decode_c(void* pixel_codec, bool* success, uint32_t* part_id, Byte* part_bytes, Pixel* pixels, int frame_size) {
+    Pixels pixels1(pixels, pixels+frame_size);
     auto [success1, part_id1, part_bytes1] = reinterpret_cast<PixelCodec*>(pixel_codec)->Decode(pixels1);
     *success = success1;
     *part_id = part_id1;

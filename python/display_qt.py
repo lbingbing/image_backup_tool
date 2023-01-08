@@ -3,6 +3,7 @@ import sys
 import enum
 import struct
 import re
+import time
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import image_codec_types
@@ -21,6 +22,7 @@ class Parameters:
         self.calibration_pixel_size_range = (1, 10)
         self.interval_range = (1, 1000)
 
+@enum.unique
 class State(enum.Enum):
     CONFIG = 0
     CALIBRATE = 1
@@ -39,6 +41,7 @@ class Context:
         self.calibration_pixel_size = 5
         self.debug = debug
 
+@enum.unique
 class CalibrationMode(enum.Enum):
     POSITION = 0
     COLOR = 1
@@ -114,9 +117,8 @@ class CalibrationPage(QtWidgets.QWidget):
         pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(pixel_type_label)
         self.pixel_type_combo_box = QtWidgets.QComboBox()
-        self.pixel_type_combo_box.addItem('pixel2', image_codec_types.PixelType.PIXEL2)
-        self.pixel_type_combo_box.addItem('pixel4', image_codec_types.PixelType.PIXEL4)
-        self.pixel_type_combo_box.addItem('pixel8', image_codec_types.PixelType.PIXEL8)
+        for t in image_codec_types.PixelType:
+            self.pixel_type_combo_box.addItem(t.name.lower(), t)
         self.pixel_type_combo_box.setCurrentIndex(0)
         config_frame_layout.addWidget(self.pixel_type_combo_box)
 
@@ -151,15 +153,8 @@ class CalibrationPage(QtWidgets.QWidget):
             if self.calibration_mode_combo_box.currentIndex() == CalibrationMode.POSITION.value:
                 self.calibration_started.emit(CalibrationMode.POSITION, [])
             elif self.calibration_mode_combo_box.currentIndex() == CalibrationMode.COLOR.value:
-                if self.context.pixel_type == image_codec_types.PixelType.PIXEL2:
-                    pixel_value_num = pixel_codec.Pixel2Codec.pixel_value_num
-                elif self.context.pixel_type == image_codec_types.PixelType.PIXEL4:
-                    pixel_value_num = pixel_codec.Pixel4Codec.pixel_value_num
-                elif self.context.pixel_type == image_codec_types.PixelType.PIXEL8:
-                    pixel_value_num = pixel_codec.Pixel8Codec.pixel_value_num
-                else:
-                    pixel_value_num = 0
-                data = [[[[(x + y  + tile_x_id + tile_y_id) % pixel_value_num
+                codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
+                data = [[[[(x + y  + tile_x_id + tile_y_id) % codec.pixel_value_num
                     for x in range(self.context.tile_x_size)]
                     for y in range(self.context.tile_y_size)]
                     for tile_x_id in range(self.context.tile_x_num)]
@@ -172,6 +167,7 @@ class CalibrationPage(QtWidgets.QWidget):
         else:
             assert 0
 
+@enum.unique
 class DisplayMode(enum.Enum):
     MANUAL = 0
     AUTO = 1
@@ -187,8 +183,6 @@ class TaskPage(QtWidgets.QWidget):
         self.context = context
         self.parameters = parameters
 
-        self.pixel_codec = None
-
         self.target_file_path = None
         self.raw_bytes = None
         self.part_byte_num = None
@@ -203,6 +197,13 @@ class TaskPage(QtWidgets.QWidget):
         self.cur_part_id = None
         self.display_mode = DisplayMode.MANUAL
         self.interval = 50
+
+        self.pixel_codec = None
+
+        self.auto_navigate_update_fps_interval = int(2000 / self.interval)
+        self.auto_navigate_frame_num = None
+        self.auto_navigate_time = None
+        self.auto_navigate_fps = None
 
         self.timer = QtCore.QTimer(self)
 
@@ -288,9 +289,8 @@ class TaskPage(QtWidgets.QWidget):
         pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(pixel_type_label)
         self.pixel_type_combo_box = QtWidgets.QComboBox()
-        self.pixel_type_combo_box.addItem('pixel2', image_codec_types.PixelType.PIXEL2)
-        self.pixel_type_combo_box.addItem('pixel4', image_codec_types.PixelType.PIXEL4)
-        self.pixel_type_combo_box.addItem('pixel8', image_codec_types.PixelType.PIXEL8)
+        for t in image_codec_types.PixelType:
+            self.pixel_type_combo_box.addItem(t.name.lower(), t)
         self.pixel_type_combo_box.setCurrentIndex(0)
         config_frame_layout.addWidget(self.pixel_type_combo_box)
 
@@ -379,6 +379,14 @@ class TaskPage(QtWidgets.QWidget):
         self.interval_spin_box.setValue(self.interval)
         self.interval_spin_box.valueChanged.connect(self.set_interval)
         display_config_frame_layout.addWidget(self.interval_spin_box)
+
+        self.auto_navigate_fps_label = QtWidgets.QLabel('auto_navigate_fps')
+        self.auto_navigate_fps_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        display_config_frame_layout.addWidget(self.auto_navigate_fps_label)
+        self.auto_navigate_fps_value_label = QtWidgets.QLabel('-')
+        self.auto_navigate_fps_value_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        self.auto_navigate_fps_value_label.setFixedWidth(50)
+        display_config_frame_layout.addWidget(self.auto_navigate_fps_value_label)
 
         cur_part_id_label = QtWidgets.QLabel('part_id')
         cur_part_id_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -497,17 +505,17 @@ class TaskPage(QtWidgets.QWidget):
                 QtWidgets.QMessageBox.warning(self, 'Warning', 'please select target file')
             elif not os.path.isfile(self.target_file_path):
                 valid = False
-                QtWidgets.QMessageBox.warning(self, 'Warning', "can't find target file '{}'".format(self.target_file_path))
+                QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find target file \'{}\''.format(self.target_file_path))
         if valid:
-            if self.part_byte_num <= 0:
+            if self.part_byte_num < image_decode_task.Task.min_part_byte_num:
                 valid = False
-                QtWidgets.QMessageBox.warning(self, 'Warning', "invalid part_byte_num '{}'".format(self.part_byte_num))
+                QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid part_byte_num \'{}\''.format(self.part_byte_num))
         if valid:
             if self.task_status_server_on:
                 m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
                 if not m:
                     valid = False
-                    QtWidgets.QMessageBox.warning(self, 'Warning', "invalid task status server '{}'".format(self.task_status_server_line_edit.text()))
+                    QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server \'{}\''.format(self.task_status_server_line_edit.text()))
         return valid
 
     def toggle_display_mode(self):
@@ -517,12 +525,19 @@ class TaskPage(QtWidgets.QWidget):
             self.interval_spin_box.setEnabled(False)
             self.timer.timeout.connect(self.navigate_next_part)
             self.timer.start(self.interval)
+            self.auto_navigate_frame_num = 0
+            self.auto_navigate_time = time.time()
+            self.auto_navigate_fps = 0
         else:
             self.display_mode = DisplayMode.MANUAL
             self.display_mode_button.setChecked(False)
             self.interval_spin_box.setEnabled(True)
             self.timer.stop()
             self.timer.timeout.disconnect()
+            self.auto_navigate_frame_num = None
+            self.auto_navigate_time = None
+            self.auto_navigate_fps = None
+            self.auto_navigate_fps_value_label.setText('-')
 
     def set_interval(self, interval):
         self.interval = interval
@@ -565,6 +580,16 @@ class TaskPage(QtWidgets.QWidget):
             if need_normal_navigate:
                 cur_part_id = self.cur_part_id + 1 if self.cur_part_id < self.part_num - 1 else 0
                 self.cur_part_id_spin_box.setValue(cur_part_id)
+        if self.display_mode == DisplayMode.AUTO:
+            self.auto_navigate_frame_num += 1
+            if self.auto_navigate_frame_num == self.auto_navigate_update_fps_interval:
+                t = time.time()
+                delta_t = t - self.auto_navigate_time
+                self.auto_navigate_time = t
+                fps = self.auto_navigate_frame_num / delta_t
+                self.auto_navigate_fps = self.auto_navigate_fps * 0.5 + fps * 0.5
+                self.auto_navigate_frame_num = 0
+                self.auto_navigate_fps_value_label.setText('{:.2f}'.format(self.auto_navigate_fps))
 
     def navigate_prev_part(self):
         if self.undone_part_ids:
@@ -681,7 +706,7 @@ class Canvas(QtWidgets.QWidget):
                                     elif pixel == image_codec_types.PixelValue.YELLOW.value:
                                         painter.setBrush(QtGui.QColor(255, 255, 0))
                                     else:
-                                        assert 0, "invalid pixel '{}'".format(pixel)
+                                        assert 0, 'invalid pixel \'{}\''.format(pixel)
                                 painter.drawRect(tile_x + x * self.context.pixel_size, tile_y + y * self.context.pixel_size, self.context.pixel_size, self.context.pixel_size)
             painter.restore()
 
@@ -761,12 +786,7 @@ class Widget(QtWidgets.QWidget):
         self.context.tile_y_size = tile_y_size
 
     def set_pixel_type(self, index):
-        if index == image_codec_types.PixelType.PIXEL2.value:
-            self.context.pixel_type = image_codec_types.PixelType.PIXEL2
-        elif index == image_codec_types.PixelType.PIXEL4.value:
-            self.context.pixel_type = image_codec_types.PixelType.PIXEL4
-        elif index == image_codec_types.PixelType.PIXEL8.value:
-            self.context.pixel_type = image_codec_types.PixelType.PIXEL8
+        self.context.pixel_type = image_codec_types.PixelType(index)
 
     def set_pixel_size(self, pixel_size):
         self.context.pixel_size = pixel_size

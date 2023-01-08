@@ -14,6 +14,7 @@ import image_decode_task
 import image_decode_task_status_server
 
 class Widget(QtWidgets.QWidget):
+    task_status_server_start = QtCore.Signal(bool)
     send_calibration = QtCore.Signal(image_decoder.Calibration)
     send_calibration_image_result = QtCore.Signal(object, bool, list)
     send_calibration_progress = QtCore.Signal(image_decode_worker.CalibrationProgress)
@@ -58,6 +59,7 @@ class Widget(QtWidgets.QWidget):
         self.task_status_server_on = False
         self.task_status_server = image_decode_task_status_server.TaskStatusServer()
 
+        self.task_status_server_start.connect(self.on_task_status_server_started)
         self.send_calibration.connect(self.receive_calibration)
         self.send_calibration_image_result.connect(self.show_result)
         self.send_calibration_progress.connect(self.show_calibration_progress)
@@ -295,8 +297,7 @@ class Widget(QtWidgets.QWidget):
 
         def get_transform_fn():
             with self.transfrom_lock:
-                transform = self.transform.clone()
-            return transform
+                return self.transform.clone()
 
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.calibration_running, self.running_lock, self.frame_q, 200))
         self.fetch_image_thread.start()
@@ -334,7 +335,7 @@ class Widget(QtWidgets.QWidget):
                 self.clear_calibration_button.setEnabled(True)
                 self.save_calibration_button.setEnabled(True)
         else:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find calibration file \'{}\''.format(calibration_path), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find calibration file \'{}\''.format(calibration_path))
 
     def clear_calibration(self):
         self.calibration.valid = False
@@ -352,8 +353,7 @@ class Widget(QtWidgets.QWidget):
 
         def get_transform_fn():
             with self.transfrom_lock:
-                transform = self.transform.clone()
-            return transform
+                return self.transform.clone()
 
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.task_running, self.running_lock, self.frame_q, 25))
         self.fetch_image_thread.start()
@@ -446,20 +446,29 @@ class Widget(QtWidgets.QWidget):
                     cv2.imwrite('{}.result_image_{}_{}.bmp'.format(self.output_file, tile_x_id, tile_y_id), self.result_images[tile_y_id][tile_x_id])
 
     def toggle_task_status_server(self):
+        self.task_status_server_button.setEnabled(False)
         if self.task_status_server_on:
             self.task_status_server.stop()
             self.task_status_server_on = False
             self.task_status_server_port_line_edit.setEnabled(True)
+            self.task_status_server_button.setEnabled(True)
         else:
-            port = -1
+            port = None
             try:
                 port = image_decode_task_status_server.parse_task_status_server_port(self.task_status_server_port_line_edit.text())
             except image_codec_types.InvalidImageCodecArgument:
-                QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server port \'{}\''.format(self.task_status_server_port_line_edit.text()), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
-            if port > 0:
-                self.task_status_server.start(port)
+                QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server port \'{}\''.format(self.task_status_server_port_line_edit.text()))
+            if port is not None:
+                server_start_cb = lambda *args: self.task_status_server_start.emit(*args)
                 self.task_status_server_on = True
                 self.task_status_server_port_line_edit.setEnabled(False)
+                self.task_status_server.start(port, server_start_cb)
+
+    def on_task_status_server_started(self, success):
+        if not success:
+            self.toggle_task_status_server()
+            self.task_status_server_button.setChecked(False)
+        self.task_status_server_button.setEnabled(True)
 
     def save_transform(self):
         with self.transfrom_lock:
@@ -472,7 +481,7 @@ class Widget(QtWidgets.QWidget):
                 self.transform.load(transform_path)
             self.update_transform_ui(self.transform)
         else:
-            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find transform file \'{}\''.format(transform_path), QtWidgets.QMessageBox.Ok, QtWidgets.QMessageBox.Ok)
+            QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find transform file \'{}\''.format(transform_path))
 
     def update_transform(self, transform):
         with self.transfrom_lock:
@@ -527,7 +536,7 @@ class Widget(QtWidgets.QWidget):
             transform.binarization_threshold = transform_utils.parse_binarization_threshold(self.binarization_threshold_line_edit.text())
             transform.pixelization_threshold = transform_utils.parse_pixelization_threshold(self.pixelization_threshold_line_edit.text())
             self.update_transform(transform)
-        except image_codec_types.InvalidImageCodecArgument as e:
+        except image_codec_types.InvalidImageCodecArgument:
             pass
 
     def update_auto_transform(self, transform):
@@ -562,6 +571,8 @@ class Widget(QtWidgets.QWidget):
             self.stop_calibration()
         if task_running:
             self.stop_task()
+        if self.task_status_server.is_running():
+            self.task_status_server.stop()
 
 if __name__ == '__main__':
     import argparse

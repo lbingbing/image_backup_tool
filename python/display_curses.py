@@ -10,7 +10,7 @@ import image_decode_task
 
 PIXEL_WIDTH = 4
 PIXEL_HEIGHT = 2
-INTERVAL = 0.05
+INTERVAL = 50
 
 COLOR_STRS = [
     '    ',
@@ -45,6 +45,7 @@ class Context:
     def __init__(self):
         pass
 
+@enum.unique
 class State(enum.Enum):
     INFO = 0
     CALIBRATE = 1
@@ -69,9 +70,12 @@ class App:
         self.auto_display_thread = None
         self.lock = threading.Lock()
 
+        self.auto_navigate_update_fps_interval = int(2000 / INTERVAL)
+        self.auto_navigate_fps = 0
+
         self.pixel_codec = pixel_codec.create_pixel_codec(self.pixel_type)
         self.part_byte_num = image_decode_task.get_part_byte_num(self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size, self.pixel_type)
-        assert self.part_byte_num > 0
+        assert self.part_byte_num >= image_decode_task.Task.min_part_byte_num
         self.raw_bytes, self.part_num = image_decode_task.get_task_bytes(self.target_file_path, self.part_byte_num)
         self.cur_part_id = 0
 
@@ -125,8 +129,9 @@ class App:
     def show_info(self):
         self.stdscr.clear()
         self.draw_background()
-        info_s = 'window size {}x{}\n'.format(curses.COLS, curses.LINES)
-        info_s += 'part_id {}/{}, undone_part_id_num {}'.format(self.cur_part_id, self.part_num - 1, len(self.undone_part_ids) if self.undone_part_ids else self.part_num)
+        info_s = 'window size {}x{}'.format(curses.COLS, curses.LINES)
+        info_s += '\npart_id {}/{}, undone_part_id_num {}'.format(self.cur_part_id, self.part_num - 1, len(self.undone_part_ids) if self.undone_part_ids else self.part_num)
+        info_s += '\nfps {:.2f}'.format(self.auto_navigate_fps)
         lines = info_s.split('\n')
         char_lines = [line[i:i+curses.COLS] for line in lines for i in range(0, len(line), curses.COLS)]
         for line_id, line in enumerate(char_lines):
@@ -187,7 +192,7 @@ class App:
                                 elif pixel == image_codec_types.PixelValue.YELLOW.value:
                                     color_pair = YELLOW_COLOR_PAIR
                                 else:
-                                    assert 0, "invalid pixel '{}'".format(pixel)
+                                    assert 0, 'invalid pixel \'{}\''.format(pixel)
                                 self.draw_color_pixel(tile_x+x, tile_y+y, color_pair)
         self.stdscr.refresh()
 
@@ -240,12 +245,22 @@ class App:
             self.auto_display_thread.join()
 
     def auto_display_worker(self):
+        auto_navigate_frame_num = 0
+        auto_navigate_time = time.time()
         while True:
             with self.lock:
                 if self.state != State.DISPLAY_AUTO:
                     break
             self.navigate_next_part()
-            time.sleep(INTERVAL)
+            auto_navigate_frame_num += 1
+            if auto_navigate_frame_num == self.auto_navigate_update_fps_interval:
+                t = time.time()
+                delta_t = t - auto_navigate_time
+                auto_navigate_time = t
+                fps = auto_navigate_frame_num / delta_t
+                self.auto_navigate_fps = self.auto_navigate_fps * 0.5 + fps * 0.5
+                auto_navigate_frame_num = 0
+            time.sleep(INTERVAL / 1000)
 
     def update_task_status(self):
         task_status_file_path = self.target_file_path + '.task'

@@ -102,12 +102,11 @@ class Pixel8Codec(PixelCodec):
         s = s[:len(s) // 8 * 8]
         return bytes([int(s[i:i+8], 2) for i in range(0, len(s), 8)])
 
+pixel_type_to_pixel_codec_mapping = {
+    image_codec_types.PixelType.PIXEL2: Pixel2Codec,
+    image_codec_types.PixelType.PIXEL4: Pixel4Codec,
+    image_codec_types.PixelType.PIXEL8: Pixel8Codec,
+    }
+
 def create_pixel_codec(pixel_type):
-    if pixel_type == image_codec_types.PixelType.PIXEL2:
-        return Pixel2Codec()
-    elif pixel_type == image_codec_types.PixelType.PIXEL4:
-        return Pixel4Codec()
-    elif pixel_type == image_codec_types.PixelType.PIXEL8:
-        return Pixel8Codec()
-    else:
-        assert 0, "invalid pixel type '{}'".format(pixel_type)
+    return pixel_type_to_pixel_codec_mapping[pixel_type]()

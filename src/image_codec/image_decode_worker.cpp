@@ -172,7 +172,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
     float done_fps = 0;
     uint32_t done_part_num0 = task.DonePartNum();
     float bps = 0;
-    float bpf = static_cast<float>(dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * m_image_decoder.GetPixelCodec().BitNumPerPixel()) / 8.0;
+    float bpf = static_cast<float>(get_part_byte_num(dim, pixel_type));
     int left_days = 0;
     int left_hours = 0;
     int left_minutes = 0;
@@ -185,7 +185,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
         ++frame_num;
         if ((frame_num & 0x7f) == 0) {
             auto t1 = std::chrono::high_resolution_clock::now();
-            auto delta_t = std::chrono::duration_cast<std::chrono::duration<float>>(t1 - t0).count();
+            auto delta_t = std::max(std::chrono::duration_cast<std::chrono::duration<float>>(t1 - t0).count(), 0.001f);
             t0 = t1;
             auto delta_frame_num = frame_num - frame_num0;
             frame_num0 = frame_num;

@@ -42,11 +42,11 @@ namespace {
     }
 }
 
-Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_num) {
-    if (pixel_num < ((META_BYTE_NUM + part_bytes.size()) * 8 + BitNumPerPixel() - 1) / BitNumPerPixel()) throw std::invalid_argument("invalid encode arguments");
+Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int frame_size) {
+    if (frame_size < ((META_BYTE_NUM + part_bytes.size()) * 8 + BitNumPerPixel() - 1) / BitNumPerPixel()) throw std::invalid_argument("invalid encode arguments");
     Bytes part_id_bytes = uint32_to_bytes(part_id);
     Bytes padded_part_bytes = part_bytes;
-    padded_part_bytes.resize(static_cast<size_t>(pixel_num * BitNumPerPixel() / 8 - META_BYTE_NUM), 0);
+    padded_part_bytes.resize(static_cast<size_t>(frame_size * BitNumPerPixel() / 8 - META_BYTE_NUM), 0);
     Bytes bytes_for_crc;
     bytes_for_crc.insert(bytes_for_crc.end(), part_id_bytes.begin(), part_id_bytes.end());
     bytes_for_crc.insert(bytes_for_crc.end(), padded_part_bytes.begin(), padded_part_bytes.end());
@@ -58,10 +58,10 @@ Pixels PixelCodec::Encode(uint32_t part_id, const Bytes& part_bytes, int pixel_n
     bytes.insert(bytes.end(), scrambled_part_id_bytes.begin(), scrambled_part_id_bytes.end());
     bytes.insert(bytes.end(), padded_part_bytes.begin(), padded_part_bytes.end());
     Pixels pixels = BytesToPixels(encrypt_bytes(bytes));
-    pixels.resize(pixel_num);
+    pixels.resize(frame_size);
     if (0) {
         std::cout << "encode\n";
-        std::cout << "pixel_num: " << std::dec << pixel_num << "\n";
+        std::cout << "frame_size: " << std::dec << frame_size << "\n";
         std::cout << "part_id: " << std::hex << part_id << "\n";
         std::cout << "part_id_bytes: " << part_id_bytes << "\n";
         std::cout << "part_bytes: " << part_bytes << "\n";

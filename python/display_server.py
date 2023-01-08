@@ -92,7 +92,7 @@ def suppress_stdout_stderr():
 
 def start_server(port, app_cfg, verbose=False):
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as s:
-        s.connect(("1.1.1.1", 80))
+        s.connect(('1.1.1.1', 80))
         ip = s.getsockname()[0]
     print('Serving Display on {}:{}'.format(ip, port))
     app = App(app_cfg)
@@ -104,7 +104,7 @@ def start_server(port, app_cfg, verbose=False):
             with suppress_stdout_stderr():
                 httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\nKeyboard interrupt received, exiting.")
+        print('\nKeyboard interrupt received, exiting.')
         httpd.server_close()
 
 if __name__ == '__main__':

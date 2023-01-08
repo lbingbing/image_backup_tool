@@ -18,6 +18,8 @@ public:
     using FinalizationProgressCb = std::function<void(const FinalizationProgress&)>;
     using FinalizationCompleteCb = std::function<void()>;
 
+    static constexpr int MIN_PART_BYTE_NUM = 8;
+
     IMAGE_CODEC_API Task(const std::string& path);
     IMAGE_CODEC_API void Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num);
     IMAGE_CODEC_API void Load();
