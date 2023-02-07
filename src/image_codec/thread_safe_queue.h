@@ -10,6 +10,13 @@ class ThreadSafeQueue {
 public:
     ThreadSafeQueue(size_t max_size = 0) : m_max_size(max_size) {}
 
+    size_t MaxSize() const { return m_max_size; }
+
+    size_t Size() {
+        std::lock_guard<std::mutex> lock(m_mtx);
+        return m_queue.size();
+    }
+
     template <typename U>
     void Push(U&& u) {
         std::unique_lock<std::mutex> lock(m_mtx);

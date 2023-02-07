@@ -4,9 +4,10 @@ import threading
 import queue
 
 from PySide6 import QtCore, QtGui, QtWidgets
-import cv2
+import cv2 as cv
 
 import image_codec_types
+import symbol_codec
 import transform_utils
 import image_decoder
 import image_decode_worker
@@ -26,15 +27,13 @@ class Widget(QtWidgets.QWidget):
     send_finalization_start = QtCore.Signal(image_decode_task.FinalizationProgress)
     send_finalization_progress = QtCore.Signal(image_decode_task.FinalizationProgress)
 
-    def __init__(self, output_file, dim, pixel_type, pixel_size, space_size, part_num, mp):
+    def __init__(self, output_file, symbol_type, dim, part_num, mp):
         super().__init__()
 
         self.output_file = output_file
+        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(symbol_type)
         self.dim = dim
         self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size = self.dim
-        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(pixel_type)
-        self.pixel_size = pixel_size
-        self.space_size = space_size
         self.part_num = part_num
         self.mp = mp
 
@@ -42,19 +41,20 @@ class Widget(QtWidgets.QWidget):
         self.calibration = image_decoder.Calibration()
         self.image = None
         self.result_images = [[None for j in range(self.tile_x_num)] for i in range(self.tile_y_num)]
-        self.frame_q = queue.Queue(maxsize=128)
-        self.part_q = queue.Queue(maxsize=128)
 
+        self.frame_q = queue.Queue(maxsize=4)
+        self.part_q = queue.Queue(maxsize=4)
         self.fetch_image_thread = None
         self.calibrate_thread = None
         self.decode_image_threads = []
         self.decode_image_result_thread = None
         self.auto_transform_thread = None
         self.save_part_thread = None
-        self.transfrom_lock = threading.Lock()
+        self.transform_lock = threading.Lock()
         self.calibration_running = [False]
         self.task_running = [False]
         self.running_lock = threading.Lock()
+
         self.monitor_on = False
         self.task_status_server_on = False
         self.task_status_server = image_decode_task_status_server.TaskStatusServer()
@@ -284,6 +284,8 @@ class Widget(QtWidgets.QWidget):
         self.task_save_part_progress_bar.setRange(0, self.part_num)
         status_group_box_layout.addWidget(self.task_save_part_progress_bar)
 
+        self.task_finalization_progress_dialog = None
+
         self.resize(1200, 600)
 
     def start_calibration(self):
@@ -296,7 +298,7 @@ class Widget(QtWidgets.QWidget):
             self.calibration_running = [True]
 
         def get_transform_fn():
-            with self.transfrom_lock:
+            with self.transform_lock:
                 return self.transform.clone()
 
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.calibration_running, self.running_lock, self.frame_q, 200))
@@ -314,6 +316,7 @@ class Widget(QtWidgets.QWidget):
         self.fetch_image_thread.join()
         self.fetch_image_thread = None
         self.frame_q.put(None)
+        self.frame_q.join()
         self.calibrate_thread.join()
         self.calibrate_thread = None
 
@@ -352,7 +355,7 @@ class Widget(QtWidgets.QWidget):
             self.task_running[0] = True
 
         def get_transform_fn():
-            with self.transfrom_lock:
+            with self.transform_lock:
                 return self.transform.clone()
 
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.task_running, self.running_lock, self.frame_q, 25))
@@ -375,7 +378,7 @@ class Widget(QtWidgets.QWidget):
         save_part_error_cb = lambda *args: self.send_save_part_error.emit(*args)
         finalization_start_cb = lambda *args: self.send_finalization_start.emit(*args)
         finalization_progress_cb = lambda *args: self.send_finalization_progress.emit(*args)
-        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.dim, self.pixel_size, self.space_size, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.dim, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
         self.save_part_thread.start()
 
     def stop_task(self):
@@ -385,6 +388,7 @@ class Widget(QtWidgets.QWidget):
         self.fetch_image_thread = None
         for i in range(self.mp + 2):
             self.frame_q.put(None)
+        self.frame_q.join()
         for t in self.decode_image_threads:
             t.join()
         self.decode_image_threads.clear()
@@ -393,6 +397,7 @@ class Widget(QtWidgets.QWidget):
         self.auto_transform_thread.join()
         self.auto_transform_thread = None
         self.part_q.put(None)
+        self.part_q.join()
         self.save_part_thread.join()
         self.save_part_thread = None
 
@@ -439,11 +444,11 @@ class Widget(QtWidgets.QWidget):
 
     def save_image(self):
         if self.image:
-            cv2.imwrite(self.output_file + '.transformed_image.bmp', self.image)
+            cv.imwrite(self.output_file + '.transformed_image.bmp', self.image)
         for tile_y_id in range(self.tile_y_num):
             for tile_x_id in range(self.tile_x_num):
                 if self.result_images[tile_y_id][tile_x_id]:
-                    cv2.imwrite('{}.result_image_{}_{}.bmp'.format(self.output_file, tile_x_id, tile_y_id), self.result_images[tile_y_id][tile_x_id])
+                    cv.imwrite('{}.result_image_{}_{}.bmp'.format(self.output_file, tile_x_id, tile_y_id), self.result_images[tile_y_id][tile_x_id])
 
     def toggle_task_status_server(self):
         self.task_status_server_button.setEnabled(False)
@@ -471,20 +476,21 @@ class Widget(QtWidgets.QWidget):
         self.task_status_server_button.setEnabled(True)
 
     def save_transform(self):
-        with self.transfrom_lock:
+        with self.transform_lock:
             self.transform.save(self.output_file + '.transform')
 
     def load_transform(self):
         transform_path = self.output_file + '.transform'
         if os.path.isfile(transform_path):
-            with self.transfrom_lock:
+            with self.transform_lock:
                 self.transform.load(transform_path)
-            self.update_transform_ui(self.transform)
+                transform = self.transform.clone()
+            self.update_transform_ui(transform)
         else:
             QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find transform file \'{}\''.format(transform_path))
 
     def update_transform(self, transform):
-        with self.transfrom_lock:
+        with self.transform_lock:
             self.transform = transform
 
     def update_transform_ui(self, transform):
@@ -579,18 +585,16 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('output_file', help='output file')
+    parser.add_argument('symbol_type', help='symbol type')
     parser.add_argument('dim', help='dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size')
-    parser.add_argument('pixel_type', help='pixel type')
-    parser.add_argument('pixel_size', type=int, help='pixel size')
-    parser.add_argument('space_size', type=int, help='space size')
     parser.add_argument('part_num', type=int, help='part num')
     parser.add_argument('--mp', type=int, default=1, help='multiprocessing')
     args = parser.parse_args()
 
+    symbol_type = symbol_codec.parse_symbol_type(args.symbol_type)
     dim = image_codec_types.parse_dim(args.dim)
-    pixel_type = image_codec_types.parse_pixel_type(args.pixel_type)
 
     app = QtWidgets.QApplication([])
-    widget = Widget(args.output_file, dim, pixel_type, args.pixel_size, args.space_size, args.part_num, args.mp)
+    widget = Widget(args.output_file, symbol_type, dim, args.part_num, args.mp)
     widget.show()
     sys.exit(app.exec())

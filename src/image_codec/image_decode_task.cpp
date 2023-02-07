@@ -1,21 +1,17 @@
-#include <sstream>
 #include <iostream>
 #include <fstream>
-#include <algorithm>
 #include <filesystem>
 #include <system_error>
 
-#include "pixel_codec.h"
+#include "symbol_codec.h"
 #include "image_decode_task.h"
 
 Task::Task(const std::string& path) : m_path(path), m_task_path(path + ".task"), m_blob_path(path + ".blob") {
 }
 
-void Task::Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num) {
+void Task::Init(SymbolType symbol_type, const Dim& dim, uint32_t part_num) {
+    m_symbol_type = symbol_type;
     m_dim = dim;
-    m_pixel_type = pixel_type;
-    m_pixel_size = pixel_size;
-    m_space_size = space_size;
     m_part_num = part_num;
     m_done_part_num = 0;
     m_task_status_bytes.resize(static_cast<size_t>((m_part_num + 7) / 8), 0);
@@ -23,12 +19,10 @@ void Task::Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_
 
 void Task::Load() {
     std::ifstream f(m_task_path, std::ios_base::binary);
-    f.read(reinterpret_cast<char*>(&m_dim), sizeof(Dim));
-    int pixel_type = 0;
-    f.read(reinterpret_cast<char*>(&pixel_type), sizeof(pixel_type));
-    m_pixel_type = static_cast<PixelType>(pixel_type);
-    f.read(reinterpret_cast<char*>(&m_pixel_size), sizeof(m_pixel_size));
-    f.read(reinterpret_cast<char*>(&m_space_size), sizeof(m_space_size));
+    int symbol_type = 0;
+    f.read(reinterpret_cast<char*>(&symbol_type), sizeof(symbol_type));
+    m_symbol_type = static_cast<SymbolType>(symbol_type);
+    f.read(reinterpret_cast<char*>(&m_dim), sizeof(m_dim));
     f.read(reinterpret_cast<char*>(&m_part_num), sizeof(m_part_num));
     f.read(reinterpret_cast<char*>(&m_done_part_num), sizeof(m_done_part_num));
     m_task_status_bytes.resize(static_cast<size_t>((m_part_num + 7) / 8), 0);
@@ -44,7 +38,7 @@ void Task::SetFinalizationCb(FinalizationStartCb finalization_start_cb, Finaliza
 bool Task::AllocateBlob() {
     if (std::filesystem::is_regular_file(m_blob_path)) return true;
     std::ofstream(m_blob_path, std::ios_base::binary);
-    uint64_t part_byte_num = get_part_byte_num(m_dim, m_pixel_type);
+    uint64_t part_byte_num = get_part_byte_num(m_symbol_type, m_dim);
     std::error_code ec;
     std::filesystem::resize_file(m_blob_path, part_byte_num * m_part_num, ec);
     return !ec;
@@ -74,15 +68,11 @@ void Task::UpdatePart(uint32_t part_id, const Bytes& part_bytes) {
 Bytes Task::ToTaskBytes() const {
     Bytes bytes;
     const uint8_t* ptr = nullptr;
+    int symbol_type = static_cast<int>(m_symbol_type);
+    ptr = reinterpret_cast<const uint8_t*>(&symbol_type);
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(symbol_type));
     ptr = reinterpret_cast<const uint8_t*>(&m_dim);
-    bytes.insert(bytes.end(), ptr, ptr+sizeof(Dim));
-    int pixel_type = static_cast<int>(m_pixel_type);
-    ptr = reinterpret_cast<const uint8_t*>(&pixel_type);
-    bytes.insert(bytes.end(), ptr, ptr+sizeof(pixel_type));
-    ptr = reinterpret_cast<const uint8_t*>(&m_pixel_size);
-    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_pixel_size));
-    ptr = reinterpret_cast<const uint8_t*>(&m_space_size);
-    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_space_size));
+    bytes.insert(bytes.end(), ptr, ptr+sizeof(m_dim));
     ptr = reinterpret_cast<const uint8_t*>(&m_part_num);
     bytes.insert(bytes.end(), ptr, ptr+sizeof(m_part_num));
     ptr = reinterpret_cast<const uint8_t*>(&m_done_part_num);
@@ -100,11 +90,9 @@ void Task::Flush() {
     m_blob_buf.clear();
 
     std::ofstream f(m_task_path, std::ios_base::binary);
-    f.write(reinterpret_cast<char*>(&m_dim), sizeof(Dim));
-    int pixel_type = static_cast<int>(m_pixel_type);
-    f.write(reinterpret_cast<char*>(&pixel_type), sizeof(pixel_type));
-    f.write(reinterpret_cast<char*>(&m_pixel_size), sizeof(m_pixel_size));
-    f.write(reinterpret_cast<char*>(&m_space_size), sizeof(m_space_size));
+    int symbol_type = static_cast<int>(m_symbol_type);
+    f.write(reinterpret_cast<char*>(&symbol_type), sizeof(symbol_type));
+    f.write(reinterpret_cast<char*>(&m_dim), sizeof(m_dim));
     f.write(reinterpret_cast<char*>(&m_part_num), sizeof(m_part_num));
     f.write(reinterpret_cast<char*>(&m_done_part_num), sizeof(m_done_part_num));
     f.write(reinterpret_cast<char*>(m_task_status_bytes.data()), m_task_status_bytes.size());
@@ -117,7 +105,7 @@ bool Task::IsDone() const {
 void Task::Finalize() {
     Flush();
     std::ifstream blob_file(m_blob_path, std::ios_base::binary);
-    uint64_t part_byte_num = get_part_byte_num(m_dim, m_pixel_type);
+    uint64_t part_byte_num = get_part_byte_num(m_symbol_type, m_dim);
     blob_file.seekg(part_byte_num * (m_part_num - 1));
     uint64_t file_size = 0;
     blob_file.read(reinterpret_cast<char*>(&file_size), sizeof(file_size));
@@ -129,10 +117,8 @@ void Task::Finalize() {
 }
 
 void Task::Print(int64_t show_undone_part_num) const {
+    std::cout << "symbol_type=" << get_symbol_type_str(m_symbol_type) << "\n";
     std::cout << "dim=" << m_dim << "\n";
-    std::cout << "pixel_type=" << get_pixel_type_str(m_pixel_type) << "\n";
-    std::cout << "pixel_size=" << m_pixel_size << "\n";
-    std::cout << "space_size=" << m_space_size << "\n";
     std::cout << "part_num=" << m_part_num << "\n";
     std::cout << "done_part_num=" << m_done_part_num << "\n";
     if (show_undone_part_num > 0) {
@@ -147,9 +133,56 @@ void Task::Print(int64_t show_undone_part_num) const {
     }
 }
 
-uint32_t get_part_byte_num(const Dim& dim, PixelType pixel_type) {
-    auto codec = create_pixel_codec(pixel_type);
-    return dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * codec->BitNumPerPixel() / 8 - PixelCodec::META_BYTE_NUM;
+uint32_t get_part_byte_num(SymbolType symbol_type, const Dim& dim) {
+    auto codec = create_symbol_codec(symbol_type);
+    return dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * codec->BitNumPerSymbol() / 8 - SymbolCodec::META_BYTE_NUM;
+}
+
+std::pair<Bytes, uint32_t> get_task_bytes(const std::string& file_path, uint32_t part_byte_num) {
+    std::ifstream f(file_path, std::ios_base::binary);
+    f.seekg(0, std::ios_base::end);
+    uint64_t file_size = f.tellg();
+    Bytes raw_bytes(file_size);
+    f.seekg(0, std::ios_base::beg);
+    f.read(reinterpret_cast<char*>(raw_bytes.data()), file_size);
+    uint32_t left_bytes_num1 = file_size % part_byte_num;
+    Bytes padding_bytes1;
+    if (left_bytes_num1) padding_bytes1.resize(part_byte_num - left_bytes_num1, 0);
+    Bytes size_bytes(reinterpret_cast<Byte*>(&file_size), reinterpret_cast<Byte*>(&file_size)+sizeof(file_size));
+    Bytes padding_bytes2(part_byte_num - size_bytes.size(), 0);
+    raw_bytes.insert(raw_bytes.end(), padding_bytes1.begin(), padding_bytes1.end());
+    raw_bytes.insert(raw_bytes.end(), size_bytes.begin(), size_bytes.end());
+    raw_bytes.insert(raw_bytes.end(), padding_bytes2.begin(), padding_bytes2.end());
+    uint32_t part_num = raw_bytes.size() / part_byte_num;
+    return std::make_pair(std::move(raw_bytes), part_num);
+}
+
+std::tuple<SymbolType, Dim, uint32_t, uint32_t, Bytes> from_task_bytes(const Bytes& task_bytes) {
+    size_t count = 0;
+    auto ptr = task_bytes.data();
+    int symbol_type_v = 0;
+    count = sizeof(symbol_type_v);
+    std::copy_n(ptr, count, reinterpret_cast<Byte*>(&symbol_type_v));
+    ptr += count;
+    SymbolType symbol_type = static_cast<SymbolType>(symbol_type_v);
+    Dim dim;
+    count = sizeof(dim);
+    std::copy_n(ptr, count, reinterpret_cast<Byte*>(&dim));
+    ptr += count;
+    uint32_t part_num = 0;
+    count = sizeof(part_num);
+    std::copy_n(ptr, count, reinterpret_cast<Byte*>(&part_num));
+    ptr += count;
+    uint32_t done_part_num = 0;
+    count = sizeof(done_part_num);
+    std::copy_n(ptr, count, reinterpret_cast<Byte*>(&done_part_num));
+    ptr += count;
+    Bytes task_status_bytes(ptr, task_bytes.data()+task_bytes.size());
+    size_t expected_task_byte_num = 4 * 7 + (part_num + 7) / 8;
+    if (task_bytes.size() != expected_task_byte_num) {
+        throw invalid_image_codec_argument("invalid task bytes of size '" + std::to_string(task_bytes.size()) + "', '" + std::to_string(expected_task_byte_num) + "' expected");
+    }
+    return std::make_tuple(symbol_type, dim, part_num, done_part_num, std::move(task_status_bytes));
 }
 
 bool is_part_done(const Bytes& task_status_bytes, uint32_t part_id) {

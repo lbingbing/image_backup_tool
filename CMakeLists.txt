@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(pixel_image_cpp)
+project(image_backup_tool)
+
+set(CMAKE_VERBOSE_MAKEFILE OFF)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -66,10 +68,13 @@ add_subdirectory(src/decode_image_stream)
 add_subdirectory(src/decode_image_stream_qt)
 add_subdirectory(src/image_codec)
 add_subdirectory(src/parse_image_decode_task)
+add_subdirectory(src/part_image_file_gen)
+add_subdirectory(src/part_image_file_stream_server)
+add_subdirectory(src/part_image_stream_server)
 add_subdirectory(src/test_calibration)
 add_subdirectory(src/test_image_decode_task_status_server)
 add_subdirectory(src/test_image_stream)
-add_subdirectory(src/test_pixel_codec)
+add_subdirectory(src/test_symbol_codec)
 add_subdirectory(src/test_thread_safe_queue)
 add_subdirectory(src/test_transform_utils)
 

@@ -1,3 +1,5 @@
+#include <iostream>
+#include <fstream>
 #include <regex>
 
 #include "image_stream.h"
@@ -28,14 +30,15 @@ cv::Mat CameraImageStream::GetFrame() {
 }
 
 ThreadedImageStream::~ThreadedImageStream() {
-    if (!m_stop) {
-        Join();
+    if (m_runnning) {
+        m_runnning = false;
+        m_thread.join();
     }
 }
 
 cv::Mat ThreadedImageStream::GetFrame() {
     std::unique_lock<std::mutex> lock(m_mtx);
-    m_cv.wait(lock, [this] { return m_stop || m_size; });
+    m_cv.wait(lock, [this] { return !m_runnning || m_size; });
     cv::Mat frame;
     if (m_size) {
         frame = std::move(m_ring_buffer[m_rptr]);
@@ -46,24 +49,12 @@ cv::Mat ThreadedImageStream::GetFrame() {
 }
 
 void ThreadedImageStream::Start() {
+    m_runnning = true;
     m_thread = std::thread(&ThreadedImageStream::Worker, this);
 }
 
-void ThreadedImageStream::Stop() {
-    m_stop = true;
-}
-
-bool ThreadedImageStream::IsStopped() const {
-    return m_stop;
-}
-
-void ThreadedImageStream::Join() {
-    Stop();
-    m_thread.join();
-}
-
 void ThreadedImageStream::Worker() {
-    while (!m_stop) {
+    while (m_runnning) {
         Bytes data = FetchData();
         cv::Mat frame;
         if (!data.empty()) {
@@ -115,11 +106,8 @@ SocketImageStream::SocketImageStream(const std::string& addr, int port, size_t b
     boost::asio::ip::tcp::endpoint endpoint(boost::asio::ip::make_address(addr), port);
     try {
         m_socket.connect(endpoint);
-    } catch (std::exception& e) {
-        Stop();
-    }
-    if (!IsStopped()) {
         Start();
+    } catch (std::exception& e) {
     }
 }
 
@@ -145,7 +133,7 @@ std::unique_ptr<ImageStream> create_image_stream() {
     std::string type("camera");
     std::string camera_url("0");
     int scale = 1;
-    size_t buffer_size = 128;
+    size_t buffer_size = 64;
     std::string ip("127.0.0.1");
     int port = 8123;
     std::ifstream cfg_file("image_stream.ini");

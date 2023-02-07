@@ -8,7 +8,7 @@ import wsgiref.simple_server
 import wsgiref.util
 import mimetypes
 
-import pixel_codec
+import symbol_codec
 import image_decode_task
 
 class App:
@@ -35,7 +35,7 @@ class App:
         m = re.match(r'^part_id=(\d+)$', query_str)
         part_id = int(m.group(1))
         part_bytes = self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num]
-        bits = pixel_codec.encode(part_id, part_bytes, self.row_num * self.col_num)
+        bits = symbol_codec.encode(part_id, part_bytes, self.row_num * self.col_num)
         rows = [bits[i*self.col_num:(i+1)*self.col_num] for i in range(self.row_num)]
         return json.dumps(rows).encode(encoding='utf-8')
 
@@ -121,7 +121,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     row_num, col_num = map(int, args.dim.split(','))
-    part_byte_num = row_num * col_num * pixel_codec.bit_num_per_pixel // 8 - pixel_codec.meta_byte_num
+    part_byte_num = row_num * col_num * symbol_codec.bit_num_per_symbol // 8 - symbol_codec.meta_byte_num
     assert part_byte_num > 0
 
     app_cfg = {

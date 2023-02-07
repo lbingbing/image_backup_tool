@@ -1,5 +1,4 @@
 #include <sstream>
-#include <chrono>
 #include <filesystem>
 
 #include <QtWidgets/QHboxLayout>
@@ -68,9 +67,7 @@ void SavePartThread::run() {
     m_worker_fn(save_part_progress_cb, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb);
 }
 
-Widget::Widget(QWidget* parent, const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, int mp)
-    : QWidget(parent), m_output_file(output_file), m_dim(dim), m_image_decode_worker(pixel_type), m_pixel_size(pixel_size), m_space_size(space_size), m_part_num(part_num), m_mp(mp)
-{
+Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp) : QWidget(parent), m_output_file(output_file), m_image_decode_worker(symbol_type), m_dim(dim), m_part_num(part_num), m_mp(mp) {
     m_result_images.resize(m_dim.tile_y_num);
     for (int tile_y_id = 0; tile_y_id < m_dim.tile_y_num; ++tile_y_id) {
         m_result_images[tile_y_id].resize(m_dim.tile_x_num);
@@ -386,7 +383,7 @@ void Widget::StartTask() {
     connect(m_auto_transform_thread.get(), &AutoTransformThread::SendAutoTransform, this, &Widget::UpdateAutoTransform);
     m_auto_transform_thread->start();
     auto save_part_worker_fn = [this](ImageDecodeWorker::SavePartProgressCb save_part_progress_cb, ImageDecodeWorker::SavePartCompleteCb save_part_complete_cb, ImageDecodeWorker::SavePartErrorCb save_part_error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb) {
-        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_pixel_size, m_space_size, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
+        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
     };
     m_save_part_thread = std::make_unique<SavePartThread>(this, save_part_worker_fn);
     connect(m_save_part_thread.get(), &SavePartThread::SendSavePartProgress, this, &Widget::ShowTaskSavePartProgress);
@@ -404,8 +401,8 @@ void Widget::StopTask() {
     for (size_t i = 0; i < m_mp + 2; ++i) {
         m_frame_q.PushNull();
     }
-    for (auto& e : m_decode_image_threads) {
-        e.join();
+    for (auto& t : m_decode_image_threads) {
+        t.join();
     }
     m_decode_image_threads.clear();
     m_decode_image_result_thread->quit();
@@ -502,9 +499,13 @@ void Widget::SaveTransform() {
 void Widget::LoadTransform() {
     auto transform_path = m_output_file + ".transform";
     if (std::filesystem::is_regular_file(transform_path)) {
-        std::lock_guard<std::mutex> lock(m_transform_mtx);
-        m_transform.Load(transform_path);
-        UpdateTransformUI(m_transform);
+        Transform transform;
+        {
+            std::lock_guard<std::mutex> lock(m_transform_mtx);
+            m_transform.Load(transform_path);
+            transform = m_transform;
+        }
+        UpdateTransformUI(transform);
     } else {
         QMessageBox::warning(this, "Warning", std::string("can't find transform file '" + transform_path + "'").c_str(), QMessageBox::Ok, QMessageBox::Ok);
     }

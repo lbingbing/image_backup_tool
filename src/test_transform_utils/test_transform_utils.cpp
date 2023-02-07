@@ -1,8 +1,8 @@
 #include <iostream>
 #include <string>
-#include <vector>
 #include <exception>
 #include <filesystem>
+
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
@@ -12,14 +12,14 @@ int main(int argc, char** argv) {
         std::string image_file;
         bool binarization_on = false;
         bool pixelization_on = false;
-        std::string pixel_type_str = "pixel2";
+        std::string symbol_type_str = "symbol1";
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
         desc_handler("image_file", boost::program_options::value<std::string>(&image_file), "image file");
         desc_handler("binarization_on", boost::program_options::value<bool>(&binarization_on), "binarization on");
         desc_handler("pixelization_on", boost::program_options::value<bool>(&pixelization_on), "pixelization on");
-        desc_handler("pixel_type", boost::program_options::value<std::string>(&pixel_type_str), "pixel type");
+        desc_handler("symbol_type", boost::program_options::value<std::string>(&symbol_type_str), "symbol type");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
         p_desc.add("image_file", 1);
@@ -37,7 +37,7 @@ int main(int argc, char** argv) {
         }
 
         if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image file '" + image_file + "' not found");
+            throw std::invalid_argument("image_file '" + image_file + "' is not file");
         }
 
         Transform transform = get_transform(vm);
@@ -48,8 +48,8 @@ int main(int argc, char** argv) {
             img1 = do_binarize(img1, transform.binarization_threshold);
         }
         if (pixelization_on) {
-            auto pixel_type = parse_pixel_type(pixel_type_str);
-            img1 = do_pixelize(img1, pixel_type, transform.pixelization_threshold);
+            auto symbol_type = parse_symbol_type(symbol_type_str);
+            img1 = do_pixelize(img1, symbol_type, transform.pixelization_threshold);
         }
         //cv::imshow("image", img1);
         //cv::waitKey();

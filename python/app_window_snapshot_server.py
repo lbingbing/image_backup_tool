@@ -8,12 +8,12 @@ import subprocess
 import threading
 import queue
 
-import cv2
+import cv2 as cv
 
 TMP_DIR_PATH = 'window_snapshot_server.tmp_dir'
 
 def image_to_msg_bytes(image):
-    ret, image_array = cv2.imencode('.png', image)
+    ret, image_array = cv.imencode('.png', image)
     image_bytes = image_array.tobytes()
     base64_image_bytes = base64.b64encode(image_bytes)
     len_bytes = struct.pack('<Q', len(base64_image_bytes))
@@ -27,7 +27,7 @@ def img_worker(running, running_lock, q, window_number, worker_id):
                 break
         res = subprocess.run(['screencapture', '-l', window_number, img_path])
         if res.returncode == 0:
-            img = cv2.imread(img_path)
+            img = cv.imread(img_path)
             msg_bytes = image_to_msg_bytes(img)
             q.put(msg_bytes)
         else:

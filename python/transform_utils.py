@@ -1,9 +1,10 @@
 import struct
 
 import numpy as np
-import cv2
+import cv2 as cv
 
 import image_codec_types
+import symbol_codec
 
 class Transform:
     def __init__(self):
@@ -176,14 +177,14 @@ def do_sphere(img, sphere):
         (cols1, 0),
         )
         )
-    mat_nw = cv2.getPerspectiveTransform(src_corners_nw, dst_corners_nw)
-    mat_sw = cv2.getPerspectiveTransform(src_corners_sw, dst_corners_sw)
-    mat_se = cv2.getPerspectiveTransform(src_corners_se, dst_corners_se)
-    mat_ne = cv2.getPerspectiveTransform(src_corners_ne, dst_corners_ne)
-    img_nw1 = cv2.warpPerspective(img_nw, mat_nw, (img_nw.shape[1], img_nw.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-    img_sw1 = cv2.warpPerspective(img_sw, mat_sw, (img_sw.shape[1], img_sw.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-    img_se1 = cv2.warpPerspective(img_se, mat_se, (img_se.shape[1], img_se.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
-    img_ne1 = cv2.warpPerspective(img_ne, mat_ne, (img_ne.shape[1], img_ne.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    mat_nw = cv.getPerspectiveTransform(src_corners_nw, dst_corners_nw)
+    mat_sw = cv.getPerspectiveTransform(src_corners_sw, dst_corners_sw)
+    mat_se = cv.getPerspectiveTransform(src_corners_se, dst_corners_se)
+    mat_ne = cv.getPerspectiveTransform(src_corners_ne, dst_corners_ne)
+    img_nw1 = cv.warpPerspective(img_nw, mat_nw, (img_nw.shape[1], img_nw.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    img_sw1 = cv.warpPerspective(img_sw, mat_sw, (img_sw.shape[1], img_sw.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    img_se1 = cv.warpPerspective(img_se, mat_se, (img_se.shape[1], img_se.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    img_ne1 = cv.warpPerspective(img_ne, mat_ne, (img_ne.shape[1], img_ne.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
     img1 = np.empty_like(img)
     img1[:rows0,:cols0] = img_nw1
     img1[rows0:,:cols0] = img_sw1
@@ -222,8 +223,8 @@ def do_quad(img, quad):
         ((1 + quad[6]) * img.shape[1], quad[7] * img.shape[0]),
         )
         )
-    mat = cv2.getPerspectiveTransform(src_corners, dst_corners)
-    img1 = cv2.warpPerspective(img, mat, (img.shape[1], img.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    mat = cv.getPerspectiveTransform(src_corners, dst_corners)
+    img1 = cv.warpPerspective(img, mat, (img.shape[1], img.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
     return img1
 
 def detect_non_white_corner_nw(img):
@@ -356,8 +357,8 @@ def do_auto_quad(img, binarization_threshold):
         (img.shape[1], 0),
         )
         )
-    mat = cv2.getPerspectiveTransform(src_corners, dst_corners)
-    img1 = cv2.warpPerspective(img, mat, (img.shape[1], img.shape[0]), flags=cv2.INTER_NEAREST, borderMode=cv2.BORDER_CONSTANT, borderValue=(255, 255, 255))
+    mat = cv.getPerspectiveTransform(src_corners, dst_corners)
+    img1 = cv.warpPerspective(img, mat, (img.shape[1], img.shape[0]), flags=cv.INTER_NEAREST, borderMode=cv.BORDER_CONSTANT, borderValue=(255, 255, 255))
     return img1
 
 def parse_filter_level(filter_level_str):
@@ -377,13 +378,13 @@ def get_filter_level_str(filter_level):
 def do_filter(img, filter_level):
     img1 = img
     if filter_level >= 4:
-        img1 = cv2.medianBlur(img1, 9)
+        img1 = cv.medianBlur(img1, 9)
     if filter_level >= 3:
-        img1 = cv2.medianBlur(img1, 7)
+        img1 = cv.medianBlur(img1, 7)
     if filter_level >= 2:
-        img1 = cv2.medianBlur(img1, 5)
+        img1 = cv.medianBlur(img1, 5)
     if filter_level >= 1:
-        img1 = cv2.medianBlur(img1, 3)
+        img1 = cv.medianBlur(img1, 3)
     return img1
 
 def parse_binarization_threshold(binarization_threshold_str):
@@ -401,8 +402,8 @@ def get_binarization_threshold_str(binarization_threshold):
     return str(binarization_threshold)
 
 def do_binarize(img, threshold):
-    img1 = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    ret, img1 = cv2.threshold(img1, threshold, 255, cv2.THRESH_BINARY)
+    img1 = cv.cvtColor(img, cv.COLOR_BGR2GRAY)
+    ret, img1 = cv.threshold(img1, threshold, 255, cv.THRESH_BINARY)
     return img1
 
 def parse_pixelization_threshold(pixelization_threshold_str):
@@ -422,15 +423,15 @@ def parse_pixelization_threshold(pixelization_threshold_str):
 def get_pixelization_threshold_str(pixelization_threshold):
     return ','.join(map(str, pixelization_threshold))
 
-def do_pixelize(img, pixel_type, threshold):
+def do_pixelize(img, symbol_type, threshold):
     img1 = np.empty_like(img)
-    ret, slice0 = cv2.threshold(img[:,:,0], threshold[0], 255, cv2.THRESH_BINARY)
-    ret, slice1 = cv2.threshold(img[:,:,1], threshold[1], 255, cv2.THRESH_BINARY)
-    ret, slice2 = cv2.threshold(img[:,:,2], threshold[2], 255, cv2.THRESH_BINARY)
+    ret, slice0 = cv.threshold(img[:,:,0], threshold[0], 255, cv.THRESH_BINARY)
+    ret, slice1 = cv.threshold(img[:,:,1], threshold[1], 255, cv.THRESH_BINARY)
+    ret, slice2 = cv.threshold(img[:,:,2], threshold[2], 255, cv.THRESH_BINARY)
     img1[:,:,0] = slice0
     img1[:,:,1] = slice1
     img1[:,:,2] = slice2
-    if pixel_type == image_codec_types.PixelType.PIXEL4:
+    if symbol_type == symbol_codec.SymbolType.SYMBOL2:
         for y in range(img1.shape[0]):
             for x in range(img1.shape[1]):
                 c1 = img1[y][x]
@@ -442,7 +443,7 @@ def do_pixelize(img, pixel_type, threshold):
                     else:
                         c1[0] = 0
                         c1[2] = 255
-    elif pixel_type == image_codec_types.PixelType.PIXEL2:
+    elif symbol_type == symbol_codec.SymbolType.SYMBOL1:
         for y in range(img1.shape[0]):
             for x in range(img1.shape[1]):
                 c1 = img1[y][x]
@@ -494,6 +495,6 @@ if __name__ == '__main__':
 
     transform = get_transform(args)
 
-    img = cv2.imread(args.image_file_path)
+    img = cv.imread(args.image_file_path)
     img = transform_image(img, transform)
-    cv2.imshow('image', img)
+    cv.imshow('image', img)

@@ -4,10 +4,11 @@ import enum
 import struct
 import re
 import time
+
 from PySide6 import QtCore, QtWidgets, QtGui
 
 import image_codec_types
-import pixel_codec
+import symbol_codec
 import image_decode_task
 import image_decode_task_status_client
 
@@ -29,17 +30,16 @@ class State(enum.Enum):
     DISPLAY = 2
 
 class Context:
-    def __init__(self, debug=False):
+    def __init__(self):
         self.state = State.CONFIG
+        self.symbol_type = symbol_codec.SymbolType.SYMBOL1
         self.tile_x_num = 1
         self.tile_y_num = 1
         self.tile_x_size = 40
         self.tile_y_size = 40
-        self.pixel_type = image_codec_types.PixelType.PIXEL2
         self.pixel_size = 10
         self.space_size = 1
         self.calibration_pixel_size = 5
-        self.debug = debug
 
 @enum.unique
 class CalibrationMode(enum.Enum):
@@ -81,6 +81,15 @@ class CalibrationPage(QtWidgets.QWidget):
         self.calibration_mode_combo_box.setCurrentIndex(0)
         config_frame_layout.addWidget(self.calibration_mode_combo_box)
 
+        symbol_type_label = QtWidgets.QLabel('symbol_type')
+        symbol_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        config_frame_layout.addWidget(symbol_type_label)
+        self.symbol_type_combo_box = QtWidgets.QComboBox()
+        for t in symbol_codec.SymbolType:
+            self.symbol_type_combo_box.addItem(t.name.lower(), t)
+        self.symbol_type_combo_box.setCurrentIndex(0)
+        config_frame_layout.addWidget(self.symbol_type_combo_box)
+
         tile_x_num_label = QtWidgets.QLabel('tile_x_num')
         tile_x_num_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(tile_x_num_label)
@@ -113,15 +122,6 @@ class CalibrationPage(QtWidgets.QWidget):
         self.tile_y_size_spin_box.setValue(self.context.tile_y_size)
         config_frame_layout.addWidget(self.tile_y_size_spin_box)
 
-        pixel_type_label = QtWidgets.QLabel('pixel_type')
-        pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        config_frame_layout.addWidget(pixel_type_label)
-        self.pixel_type_combo_box = QtWidgets.QComboBox()
-        for t in image_codec_types.PixelType:
-            self.pixel_type_combo_box.addItem(t.name.lower(), t)
-        self.pixel_type_combo_box.setCurrentIndex(0)
-        config_frame_layout.addWidget(self.pixel_type_combo_box)
-
         pixel_size_label = QtWidgets.QLabel('pixel_size')
         pixel_size_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(pixel_size_label)
@@ -153,12 +153,8 @@ class CalibrationPage(QtWidgets.QWidget):
             if self.calibration_mode_combo_box.currentIndex() == CalibrationMode.POSITION.value:
                 self.calibration_started.emit(CalibrationMode.POSITION, [])
             elif self.calibration_mode_combo_box.currentIndex() == CalibrationMode.COLOR.value:
-                codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
-                data = [[[[(x + y  + tile_x_id + tile_y_id) % codec.pixel_value_num
-                    for x in range(self.context.tile_x_size)]
-                    for y in range(self.context.tile_y_size)]
-                    for tile_x_id in range(self.context.tile_x_num)]
-                    for tile_y_id in range(self.context.tile_y_num)]
+                codec = symbol_codec.create_symbol_codec(self.context.symbol_type)
+                data = [(x + y + tile_x_id + tile_y_id) % codec.get_symbol_value_num() for tile_y_id in range(self.context.tile_y_num) for tile_x_id in range(self.context.tile_x_num) for y in range(self.context.tile_y_size) for x in range(self.context.tile_x_size)]
                 self.calibration_started.emit(CalibrationMode.COLOR, data)
         elif self.context.state == State.CALIBRATE:
             self.context.state = State.CONFIG
@@ -198,7 +194,7 @@ class TaskPage(QtWidgets.QWidget):
         self.display_mode = DisplayMode.MANUAL
         self.interval = 50
 
-        self.pixel_codec = None
+        self.symbol_codec = None
 
         self.auto_navigate_update_fps_interval = int(2000 / self.interval)
         self.auto_navigate_frame_num = None
@@ -253,6 +249,15 @@ class TaskPage(QtWidgets.QWidget):
 
         config_frame_layout = QtWidgets.QHBoxLayout(self.config_frame)
 
+        symbol_type_label = QtWidgets.QLabel('symbol_type')
+        symbol_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        config_frame_layout.addWidget(symbol_type_label)
+        self.symbol_type_combo_box = QtWidgets.QComboBox()
+        for t in symbol_codec.SymbolType:
+            self.symbol_type_combo_box.addItem(t.name.lower(), t)
+        self.symbol_type_combo_box.setCurrentIndex(0)
+        config_frame_layout.addWidget(self.symbol_type_combo_box)
+
         tile_x_num_label = QtWidgets.QLabel('tile_x_num')
         tile_x_num_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(tile_x_num_label)
@@ -284,15 +289,6 @@ class TaskPage(QtWidgets.QWidget):
         self.tile_y_size_spin_box.setRange(*self.parameters.tile_y_size_range)
         self.tile_y_size_spin_box.setValue(self.context.tile_y_size)
         config_frame_layout.addWidget(self.tile_y_size_spin_box)
-
-        pixel_type_label = QtWidgets.QLabel('pixel_type')
-        pixel_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        config_frame_layout.addWidget(pixel_type_label)
-        self.pixel_type_combo_box = QtWidgets.QComboBox()
-        for t in image_codec_types.PixelType:
-            self.pixel_type_combo_box.addItem(t.name.lower(), t)
-        self.pixel_type_combo_box.setCurrentIndex(0)
-        config_frame_layout.addWidget(self.pixel_type_combo_box)
 
         pixel_size_label = QtWidgets.QLabel('pixel_size')
         pixel_size_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
@@ -441,22 +437,20 @@ class TaskPage(QtWidgets.QWidget):
             self.task_file_line_edit.setText(task_file_path)
             task = image_decode_task.Task(task_file_path[:task_file_path.rindex('.task')])
             task.load()
+            self.symbol_type_combo_box.setCurrentIndex(task.symbol_type.value)
             tile_x_num, tile_y_num, tile_x_size, tile_y_size = task.dim
             self.tile_x_num_spin_box.setValue(tile_x_num)
             self.tile_y_num_spin_box.setValue(tile_y_num)
             self.tile_x_size_spin_box.setValue(tile_x_size)
             self.tile_y_size_spin_box.setValue(tile_y_size)
-            self.pixel_type_combo_box.setCurrentIndex(task.pixel_type.value)
-            self.pixel_size_spin_box.setValue(task.pixel_size)
-            self.space_size_spin_box.setValue(task.space_size)
             self.part_num = task.part_num
             self.undone_part_ids = [part_id for part_id in range(self.part_num) if not task.is_part_done(part_id)]
             assert self.undone_part_ids
 
     def toggle_task_start_stop(self):
         if self.context.state == State.CONFIG:
-            self.pixel_codec = pixel_codec.create_pixel_codec(self.context.pixel_type)
-            self.part_byte_num = image_decode_task.get_part_byte_num(self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size, self.context.pixel_type)
+            self.symbol_codec = symbol_codec.create_symbol_codec(self.context.symbol_type)
+            self.part_byte_num = image_decode_task.get_part_byte_num(self.context.symbol_type, (self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size))
             if self.validate_config():
                 self.context.state = State.DISPLAY
                 self.raw_bytes, part_num = image_decode_task.get_task_bytes(self.target_file_path, self.part_byte_num)
@@ -487,7 +481,7 @@ class TaskPage(QtWidgets.QWidget):
                 self.task_button.setChecked(False)
         elif self.context.state == State.DISPLAY:
             self.context.state = State.CONFIG
-            self.pixel_codec = None
+            self.symbol_codec = None
             if self.display_mode == DisplayMode.AUTO:
                 self.toggle_display_mode()
             self.task_frame.setEnabled(True)
@@ -548,21 +542,9 @@ class TaskPage(QtWidgets.QWidget):
 
     def draw(self, part_id):
         part_bytes = bytes(self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num])
-        pixels = self.pixel_codec.encode(part_id, part_bytes, self.context.tile_x_num * self.context.tile_y_num * self.context.tile_x_size * self.context.tile_y_size)
-        data = [[[[pixels[((tile_y_id * self.context.tile_x_num + tile_x_id) * self.context.tile_y_size + y) * self.context.tile_x_size + x]
-            for x in range(self.context.tile_x_size)]
-            for y in range(self.context.tile_y_size)]
-            for tile_x_id in range(self.context.tile_x_num)]
-            for tile_y_id in range(self.context.tile_y_num)]
+        symbols = self.symbol_codec.encode(part_id, part_bytes, self.context.tile_x_num * self.context.tile_y_num * self.context.tile_x_size * self.context.tile_y_size)
+        data = symbols
         self.part_navigated.emit(data)
-        if self.context.debug:
-            with open('display_qt.log', 'w', encoding='utf-8') as f:
-                for tile_y_id in range(self.context.tile_y_num):
-                    for tile_x_id in range(self.context.tile_x_num):
-                        print('tile_{}_{}'.format(tile_x_id, tile_y_id), file=f)
-                        for y in range(self.context.tile_y_size):
-                            for x in range(self.context.tile_x_size):
-                                print('pixel_{}_{}={}'.format(x, y, data[tile_y_id][tile_x_id][y][x]), file=f)
 
     def navigate_next_part(self):
         if self.undone_part_ids:
@@ -602,11 +584,9 @@ class TaskPage(QtWidgets.QWidget):
     def fetch_task_status(self):
         task_bytes = self.task_status_client.get_task_status()
         if task_bytes:
-            dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+            symbol_type, dim, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+            assert symbol_type == self.context.symbol_type
             assert dim == (self.context.tile_x_num, self.context.tile_y_num, self.context.tile_x_size, self.context.tile_y_size)
-            assert pixel_type == self.context.pixel_type
-            assert pixel_size == self.context.pixel_size
-            assert space_size == self.context.space_size
             assert part_num == self.part_num
             assert len(task_status_bytes) == (self.part_num + 7) // 8
             self.undone_part_ids = [part_id for part_id in range(self.part_num) if not image_decode_task.is_part_done(task_status_bytes, part_id)]
@@ -688,33 +668,33 @@ class Canvas(QtWidgets.QWidget):
                                 if self.is_tile_border(x, y):
                                     painter.setBrush(QtGui.QColor(0, 0, 0))
                                 else:
-                                    pixel = self.data[tile_y_id][tile_x_id][y-1][x-1]
-                                    if pixel == image_codec_types.PixelValue.WHITE.value:
+                                    symbol = self.data[((tile_y_id * self.context.tile_x_num + tile_x_id) * self.context.tile_y_size + (y - 1)) * self.context.tile_x_size + (x - 1)]
+                                    if symbol == image_codec_types.PixelColor.WHITE.value:
                                         painter.setBrush(QtGui.QColor(255, 255, 255))
-                                    elif pixel == image_codec_types.PixelValue.BLACK.value:
+                                    elif symbol == image_codec_types.PixelColor.BLACK.value:
                                         painter.setBrush(QtGui.QColor(0, 0, 0))
-                                    elif pixel == image_codec_types.PixelValue.RED.value:
+                                    elif symbol == image_codec_types.PixelColor.RED.value:
                                         painter.setBrush(QtGui.QColor(255, 0, 0))
-                                    elif pixel == image_codec_types.PixelValue.BLUE.value:
+                                    elif symbol == image_codec_types.PixelColor.BLUE.value:
                                         painter.setBrush(QtGui.QColor(0, 0, 255))
-                                    elif pixel == image_codec_types.PixelValue.GREEN.value:
+                                    elif symbol == image_codec_types.PixelColor.GREEN.value:
                                         painter.setBrush(QtGui.QColor(0, 255, 0))
-                                    elif pixel == image_codec_types.PixelValue.CYAN.value:
+                                    elif symbol == image_codec_types.PixelColor.CYAN.value:
                                         painter.setBrush(QtGui.QColor(0, 255, 255))
-                                    elif pixel == image_codec_types.PixelValue.MAGENTA.value:
+                                    elif symbol == image_codec_types.PixelColor.MAGENTA.value:
                                         painter.setBrush(QtGui.QColor(255, 0, 255))
-                                    elif pixel == image_codec_types.PixelValue.YELLOW.value:
+                                    elif symbol == image_codec_types.PixelColor.YELLOW.value:
                                         painter.setBrush(QtGui.QColor(255, 255, 0))
                                     else:
-                                        assert 0, 'invalid pixel \'{}\''.format(pixel)
+                                        assert 0, 'invalid symbol \'{}\''.format(symbol)
                                 painter.drawRect(tile_x + x * self.context.pixel_size, tile_y + y * self.context.pixel_size, self.context.pixel_size, self.context.pixel_size)
             painter.restore()
 
 class Widget(QtWidgets.QWidget):
-    def __init__(self, debug=False):
+    def __init__(self):
         super().__init__()
 
-        self.context = Context(debug=debug)
+        self.context = Context()
         self.parameters = Parameters()
 
         layout = QtWidgets.QVBoxLayout(self)
@@ -724,6 +704,8 @@ class Widget(QtWidgets.QWidget):
         self.calibration_page = CalibrationPage(self.parameters, self.context)
         self.task_page = TaskPage(self.parameters, self.context)
 
+        self.calibration_page.symbol_type_combo_box.currentIndexChanged.connect(self.task_page.symbol_type_combo_box.setCurrentIndex)
+        self.calibration_page.symbol_type_combo_box.currentIndexChanged.connect(self.set_symbol_type)
         self.calibration_page.tile_x_num_spin_box.valueChanged.connect(self.task_page.tile_x_num_spin_box.setValue)
         self.calibration_page.tile_x_num_spin_box.valueChanged.connect(self.set_tile_x_num)
         self.calibration_page.tile_y_num_spin_box.valueChanged.connect(self.task_page.tile_y_num_spin_box.setValue)
@@ -732,13 +714,13 @@ class Widget(QtWidgets.QWidget):
         self.calibration_page.tile_x_size_spin_box.valueChanged.connect(self.set_tile_x_size)
         self.calibration_page.tile_y_size_spin_box.valueChanged.connect(self.task_page.tile_y_size_spin_box.setValue)
         self.calibration_page.tile_y_size_spin_box.valueChanged.connect(self.set_tile_y_size)
-        self.calibration_page.pixel_type_combo_box.currentIndexChanged.connect(self.task_page.pixel_type_combo_box.setCurrentIndex)
-        self.calibration_page.pixel_type_combo_box.currentIndexChanged.connect(self.set_pixel_type)
         self.calibration_page.pixel_size_spin_box.valueChanged.connect(self.task_page.pixel_size_spin_box.setValue)
         self.calibration_page.pixel_size_spin_box.valueChanged.connect(self.set_pixel_size)
         self.calibration_page.space_size_spin_box.valueChanged.connect(self.task_page.space_size_spin_box.setValue)
         self.calibration_page.space_size_spin_box.valueChanged.connect(self.set_space_size)
         self.calibration_page.calibration_pixel_size_spin_box.valueChanged.connect(self.set_calibration_pixel_size)
+        self.task_page.symbol_type_combo_box.currentIndexChanged.connect(self.calibration_page.symbol_type_combo_box.setCurrentIndex)
+        self.task_page.symbol_type_combo_box.currentIndexChanged.connect(self.set_symbol_type)
         self.task_page.tile_x_num_spin_box.valueChanged.connect(self.calibration_page.tile_x_num_spin_box.setValue)
         self.task_page.tile_x_num_spin_box.valueChanged.connect(self.set_tile_x_num)
         self.task_page.tile_y_num_spin_box.valueChanged.connect(self.calibration_page.tile_y_num_spin_box.setValue)
@@ -747,8 +729,6 @@ class Widget(QtWidgets.QWidget):
         self.task_page.tile_x_size_spin_box.valueChanged.connect(self.set_tile_x_size)
         self.task_page.tile_y_size_spin_box.valueChanged.connect(self.calibration_page.tile_y_size_spin_box.setValue)
         self.task_page.tile_y_size_spin_box.valueChanged.connect(self.set_tile_y_size)
-        self.task_page.pixel_type_combo_box.currentIndexChanged.connect(self.calibration_page.pixel_type_combo_box.setCurrentIndex)
-        self.task_page.pixel_type_combo_box.currentIndexChanged.connect(self.set_pixel_type)
         self.task_page.pixel_size_spin_box.valueChanged.connect(self.calibration_page.pixel_size_spin_box.setValue)
         self.task_page.pixel_size_spin_box.valueChanged.connect(self.set_pixel_size)
         self.task_page.space_size_spin_box.valueChanged.connect(self.calibration_page.space_size_spin_box.setValue)
@@ -773,6 +753,9 @@ class Widget(QtWidgets.QWidget):
         self.task_page.part_navigated.connect(self.canvas.draw_part)
         self.task_page.task_stopped.connect(self.stop_task)
 
+    def set_symbol_type(self, index):
+        self.context.symbol_type = symbol_codec.SymbolType(index)
+
     def set_tile_x_num(self, tile_x_num):
         self.context.tile_x_num = tile_x_num
 
@@ -784,9 +767,6 @@ class Widget(QtWidgets.QWidget):
 
     def set_tile_y_size(self, tile_y_size):
         self.context.tile_y_size = tile_y_size
-
-    def set_pixel_type(self, index):
-        self.context.pixel_type = image_codec_types.PixelType(index)
 
     def set_pixel_size(self, pixel_size):
         self.context.pixel_size = pixel_size
@@ -839,13 +819,7 @@ class Widget(QtWidgets.QWidget):
         return super().eventFilter(obj, event)
 
 if __name__ == '__main__':
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument('--debug', action='store_true', help='debug')
-    args = parser.parse_args()
-
     app = QtWidgets.QApplication([])
-    widget = Widget(args.debug)
+    widget = Widget()
     widget.show()
     sys.exit(app.exec())

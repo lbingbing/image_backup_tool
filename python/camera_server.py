@@ -10,17 +10,17 @@ import wsgiref.util
 import mimetypes
 
 import numpy as np
-import cv2
+import cv2 as cv
 
 def base64_image_bytes_to_image(base64_data):
     image_data = base64.b64decode(base64_data)
     image_array = np.frombuffer(image_data, dtype=np.uint8)
-    image = cv2.imdecode(image_array, cv2.IMREAD_COLOR)
-    image = cv2.rotate(image, cv2.ROTATE_90_COUNTERCLOCKWISE)
+    image = cv.imdecode(image_array, cv.IMREAD_COLOR)
+    image = cv.rotate(image, cv.ROTATE_90_COUNTERCLOCKWISE)
     return image
 
 def image_to_msg_bytes(image):
-    ret, image_array = cv2.imencode('.png', image)
+    ret, image_array = cv.imencode('.png', image)
     image_bytes = image_array.tobytes()
     base64_image_bytes = base64.b64encode(image_bytes)
     len_bytes = struct.pack('<Q', len(base64_image_bytes))

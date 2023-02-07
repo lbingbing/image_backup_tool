@@ -4,8 +4,8 @@
 #include <QtWidgets/QGroupBox>
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QLabel>
-#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QLineEdit>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QProgressDialog>
 #include <QThread>
@@ -91,7 +91,7 @@ class Widget : public QWidget
     Q_OBJECT
 
 public:
-    Widget(QWidget* parent, const std::string& output_file, const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num, int mp);
+    Widget(QWidget* parent, const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp);
 
 private slots:
     void ToggleCalibrationStartStop();
@@ -127,10 +127,8 @@ private:
     void UpdateTransformUI(const Transform& transform);
 
     std::string m_output_file;
-    Dim m_dim;
     ImageDecodeWorker m_image_decode_worker;
-    int m_pixel_size = 0;
-    int m_space_size = 0;
+    Dim m_dim;
     uint32_t m_part_num = 0;
     int m_mp = 0;
     Transform m_transform;

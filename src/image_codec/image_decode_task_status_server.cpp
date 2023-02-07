@@ -1,4 +1,3 @@
-#include <sstream>
 #include <boost/asio.hpp>
 
 #include "image_decode_task_status_server.h"

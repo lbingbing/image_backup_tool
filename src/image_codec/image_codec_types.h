@@ -2,42 +2,41 @@
 
 #include <iostream>
 #include <string>
+#include <array>
 #include <vector>
+#include <exception>
 
 #include "image_codec_api.h"
 
 using Byte = uint8_t;
 using Bytes = std::vector<Byte>;
-using Pixel = uint8_t;
-using Pixels = std::vector<Pixel>;
+using Symbol = uint8_t;
+using Symbols = std::vector<Symbol>;
 
 IMAGE_CODEC_API std::ostream& operator<<(std::ostream& os, const std::vector<uint8_t>& v);
 
-enum class PixelType {
-    PIXEL2 = 0,
-    PIXEL4 = 1,
-    PIXEL8 = 2,
+enum class PixelColor {
+    WHITE   = 0,
+    BLACK   = 1,
+    RED     = 2,
+    BLUE    = 3,
+    GREEN   = 4,
+    CYAN    = 5,
+    MAGENTA = 6,
+    YELLOW  = 7,
+    UNKNOWN = 8,
+    NUM     = 9,
 };
 
-constexpr uint8_t PIXEL_WHITE   = 0;
-constexpr uint8_t PIXEL_BLACK   = 1;
-constexpr uint8_t PIXEL_RED     = 2;
-constexpr uint8_t PIXEL_BLUE    = 3;
-constexpr uint8_t PIXEL_GREEN   = 4;
-constexpr uint8_t PIXEL_CYAN    = 5;
-constexpr uint8_t PIXEL_MAGENTA = 6;
-constexpr uint8_t PIXEL_YELLOW  = 7;
-constexpr uint8_t PIXEL_UNKNOWN = 8;
-constexpr uint8_t PIXEL_NUM     = 9;
-
-IMAGE_CODEC_API std::string get_pixel_name(Pixel pixel);
-
-IMAGE_CODEC_API PixelType parse_pixel_type(const std::string& pixel_type_str);
-IMAGE_CODEC_API std::string get_pixel_type_str(PixelType pixel_type);
+IMAGE_CODEC_API std::string get_pixel_color(Symbol symbol);
 
 class invalid_image_codec_argument : public std::invalid_argument {
 public:
-    invalid_image_codec_argument(const std::string& what_arg) : std::invalid_argument(what_arg) {}
+    invalid_image_codec_argument(const std::string& what_arg) : std::invalid_argument(what_arg) {
+#if _WIN32
+        std::cerr << what_arg << "\n";
+#endif
+    }
 };
 
 template <typename T>
@@ -51,8 +50,31 @@ template <typename T> inline T stox(const std::string& s);
 template <> inline int stox(const std::string& s) { return std::stoi(s); }
 template <> inline float stox(const std::string& s) { return std::stof(s); }
 
+template <typename T, size_t N>
+inline std::array<T, N> parse_array(const std::string& str) {
+    std::array<T, N> arr;
+    int index = 0;
+    size_t pos = 0;
+    while (true) {
+        if (index >= N) throw invalid_image_codec_argument("element num > N (" + std::to_string(N) + ") '" + str + "'");
+        auto pos1 = str.find(",", pos);
+        auto s = str.substr(pos, pos1 == std::string::npos ? std::string::npos : pos1 - pos);
+        if (s[0] == 'n') s.replace(0, 1, "-");
+        try {
+            arr[index] = stox<T>(s);
+            ++index;
+        }
+        catch (const std::exception&) {
+            throw invalid_image_codec_argument("invalid " + std::string(TypeNameStr<T>) +"s '" + str + "'");
+        }
+        if (pos1 == std::string::npos) break;
+        pos = pos1 + 1;
+    }
+    if (index < N) throw invalid_image_codec_argument("element num < N (" + std::to_string(N) + ") '" + str + "'");
+    return arr;
+}
 template <typename T>
-inline std::vector<T> parse_vec(const std::string& str) {
+inline std::vector<T> parse_vector(const std::string& str) {
     std::vector<T> vec;
     size_t pos = 0;
     while (true) {

@@ -1,13 +1,7 @@
 import enum
 
 @enum.unique
-class PixelType(enum.Enum):
-    PIXEL2 = 0
-    PIXEL4 = 1
-    PIXEL8 = 2
-
-@enum.unique
-class PixelValue(enum.Enum):
+class PixelColor(enum.Enum):
     WHITE   = 0
     BLACK   = 1
     RED     = 2
@@ -18,9 +12,6 @@ class PixelValue(enum.Enum):
     YELLOW  = 7
     UNKNOWN = 8
     NUM     = 9
-
-def parse_pixel_type(pixel_type_str):
-    return PixelType[pixel_type_str.upper()]
 
 class InvalidImageCodecArgument(Exception):
     pass

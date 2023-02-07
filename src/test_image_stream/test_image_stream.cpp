@@ -1,5 +1,3 @@
-#include <iostream>
-#include <exception>
 #include <opencv2/opencv.hpp>
 
 #include "image_codec.h"

@@ -1,6 +1,7 @@
 #include <iostream>
 #include <exception>
 #include <filesystem>
+
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
@@ -31,7 +32,7 @@ int main(int argc, char** argv) {
         }
 
         if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image file '" + image_file + "' not found");
+            throw std::invalid_argument("image_file '" + image_file + "' is not file");
         }
 
         if (!vm.count("dim")) {
@@ -42,7 +43,7 @@ int main(int argc, char** argv) {
         Transform transform = get_transform(vm);
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
-        auto [img1, calibration, result_imgs] = ImageDecoder(PixelType::PIXEL2).Calibrate(img, dim, transform);
+        auto [img1, calibration, result_imgs] = ImageDecoder(SymbolType::SYMBOL1).Calibrate(img, dim, transform);
         auto pos = image_file.rfind(".");
         auto image_file_prefix = image_file.substr(0, pos);
         auto image_file_suffix = image_file.substr(pos);

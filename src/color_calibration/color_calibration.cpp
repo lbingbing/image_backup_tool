@@ -3,12 +3,13 @@
 #include <exception>
 #include <thread>
 #include <filesystem>
+
 #include <boost/program_options.hpp>
 
 #include "image_codec.h"
 
 void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file, int print_detailed_mismatch_info_level) {
-    auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform, calibration, true);
+    auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform, calibration, true);
     if (save_result_image) {
         auto pos = image_file.rfind(".");
         auto image_file_prefix = image_file.substr(0, pos);
@@ -26,33 +27,33 @@ void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, con
             }
         }
     }
-    if (part_pixels.empty()) {
-        std::cout << "pixels decode fail\n";
+    if (part_symbols.empty()) {
+        std::cout << "symbols decode fail\n";
     } else {
         int mismatch_count = 0;
-        std::map<Pixel, std::map<Pixel, int>> mismatch_counts;
+        std::map<Symbol, std::map<Symbol, int>> mismatch_counts;
         for (int tile_y_id = 0; tile_y_id < dim.tile_y_num; ++tile_y_id) {
             for (int tile_x_id = 0; tile_x_id < dim.tile_x_num; ++tile_x_id) {
                 for (int y = 0; y < dim.tile_y_size; ++y) {
                     for (int x = 0; x < dim.tile_x_size; ++x) {
-                        Pixel golden_pixel = (x + y + tile_x_id + tile_y_id) % image_decoder->GetPixelCodec().PixelValueNum();
+                        Symbol golden_symbol = (x + y + tile_x_id + tile_y_id) % image_decoder->GetSymbolCodec().SymbolValueNum();
                         int index = ((tile_y_id * dim.tile_x_num + tile_x_id) * dim.tile_y_size + y) * dim.tile_x_size + x;
-                        auto actual_pixel = part_pixels[index];
-                        if (actual_pixel != golden_pixel) {
+                        auto actual_symbol = part_symbols[index];
+                        if (actual_symbol != golden_symbol) {
                             if (print_detailed_mismatch_info_level >= 2) {
-                                std::cout << "pixel_" << tile_x_id << "_" << tile_y_id << "_" << x << "_" << y << ": " << get_pixel_name(golden_pixel) << " -> " << get_pixel_name(actual_pixel) << "\n";
+                                std::cout << "symbol_" << tile_x_id << "_" << tile_y_id << "_" << x << "_" << y << ": " << get_pixel_color(golden_symbol) << " -> " << get_pixel_color(actual_symbol) << "\n";
                             }
                             ++mismatch_count;
-                            ++mismatch_counts[golden_pixel][actual_pixel];
+                            ++mismatch_counts[golden_symbol][actual_symbol];
                         }
                     }
                 }
             }
         }
         if (print_detailed_mismatch_info_level >= 1) {
-            for (const auto& [golden_pixel, e] : mismatch_counts) {
-                for (const auto& [actual_pixel, count] : e) {
-                    std::cout << "mismatch " << get_pixel_name(golden_pixel) << " -> " << get_pixel_name(actual_pixel) << ": " << count << "\n";
+            for (const auto& [golden_symbol, e] : mismatch_counts) {
+                for (const auto& [actual_symbol, count] : e) {
+                    std::cout << "mismatch " << get_pixel_color(golden_symbol) << " -> " << get_pixel_color(actual_symbol) << ": " << count << "\n";
                 }
             }
         }
@@ -66,15 +67,15 @@ void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, con
 }
 
 
-bool is_mismatch(const Pixels& part_pixels, ImageDecoder* image_decoder, const Dim& dim) {
+bool is_mismatch(const Symbols& part_symbols, ImageDecoder* image_decoder, const Dim& dim) {
     for (int tile_y_id = 0; tile_y_id < dim.tile_y_num; ++tile_y_id) {
         for (int tile_x_id = 0; tile_x_id < dim.tile_x_num; ++tile_x_id) {
             for (int y = 0; y < dim.tile_y_size; ++y) {
                 for (int x = 0; x < dim.tile_x_size; ++x) {
-                    Pixel golden_pixel = (x + y + tile_x_id + tile_y_id) % image_decoder->GetPixelCodec().PixelValueNum();
+                    Symbol golden_symbol = (x + y + tile_x_id + tile_y_id) % image_decoder->GetSymbolCodec().SymbolValueNum();
                     int index = ((tile_y_id * dim.tile_x_num + tile_x_id) * dim.tile_y_size + y) * dim.tile_x_size + x;
-                    auto actual_pixel = part_pixels[index];
-                    if (actual_pixel != golden_pixel) {
+                    auto actual_symbol = part_symbols[index];
+                    if (actual_symbol != golden_symbol) {
                         return true;
                     }
                 }
@@ -96,8 +97,8 @@ void scan1_worker(ResultQueue& q_result, InputQueue& q_in, ImageDecoder* image_d
         transform1.pixelization_threshold[0] = b;
         transform1.pixelization_threshold[1] = g;
         transform1.pixelization_threshold[2] = r;
-        auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
-        if (!part_pixels.empty() && !is_mismatch(part_pixels, image_decoder, dim)) {
+        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
+        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, dim)) {
             q_result.Emplace(true, b, g, r);
         } else {
             q_result.Emplace(false, 0, 0, 0);
@@ -160,9 +161,9 @@ void scan2(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, cons
         transform1.pixelization_threshold[0] = c;
         transform1.pixelization_threshold[1] = c;
         transform1.pixelization_threshold[2] = c;
-        auto [dummy_success, part_id, part_bytes, part_pixels, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
+        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
         std::cout << "bgr: " << c << "," << c << "," << c << " ";
-        if (!part_pixels.empty() && !is_mismatch(part_pixels, image_decoder, dim)) {
+        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, dim)) {
             std::cout << "pass";
         } else {
             std::cout << "fail";
@@ -183,8 +184,8 @@ int main(int argc, char** argv) {
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
         desc_handler("image_file", boost::program_options::value<std::string>(&image_file), "image file");
+        desc_handler("symbol_type", boost::program_options::value<std::string>(), "symbol type");
         desc_handler("dim", boost::program_options::value<std::string>(), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
-        desc_handler("pixel_type", boost::program_options::value<std::string>(), "pixel type");
         desc_handler("calibration_file", boost::program_options::value<std::string>(&calibration_file), "calibration file");
         desc_handler("save_result_image", boost::program_options::value<bool>(&save_result_image), "dump result image");
         desc_handler("scan_mode", boost::program_options::value<int>(&scan_mode), "scan mode, 1: bgr; 2: gray");
@@ -193,8 +194,8 @@ int main(int argc, char** argv) {
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
         p_desc.add("image_file", 1);
+        p_desc.add("symbol_type", 1);
         p_desc.add("dim", 1);
-        p_desc.add("pixel_type", 1);
         boost::program_options::variables_map vm;
         boost::program_options::store(boost::program_options::command_line_parser(argc, argv).options(desc).positional(p_desc).run(), vm);
         boost::program_options::notify(vm);
@@ -209,19 +210,25 @@ int main(int argc, char** argv) {
         }
 
         if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image file '" + image_file + "' not found");
+            throw std::invalid_argument("image_file '" + image_file + "' is not file");
+        }
+
+        if (!vm.count("symbol_type")) {
+            throw std::invalid_argument("symbol_type not specified");
         }
 
         if (!vm.count("dim")) {
             throw std::invalid_argument("dim not specified");
         }
 
-        if (!vm.count("pixel_type")) {
-            throw std::invalid_argument("pixel_type not specified");
+        if (vm.count("calibration_file")) {
+            if (!std::filesystem::is_regular_file(calibration_file)) {
+                throw std::invalid_argument("calibration_file '" + calibration_file + "' is not file");
+            }
         }
 
+        ImageDecoder image_decoder(parse_symbol_type(vm["symbol_type"].as<std::string>()));
         auto dim = parse_dim(vm["dim"].as<std::string>());
-        ImageDecoder image_decoder(parse_pixel_type(vm["pixel_type"].as<std::string>()));
         Transform transform = get_transform(vm);
         Calibration calibration;
         if (vm.count("calibration_file")) {

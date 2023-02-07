@@ -5,7 +5,7 @@ import time
 import threading
 
 import image_codec_types
-import pixel_codec
+import symbol_codec
 import image_decode_task
 
 PIXEL_WIDTH = 4
@@ -53,14 +53,12 @@ class State(enum.Enum):
     DISPLAY_AUTO = 3
 
 class App:
-    def __init__(self, stdscr, target_file_path, tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type):
+    def __init__(self, stdscr, target_file_path, symbol_type, dim):
         self.stdscr = stdscr
         self.target_file_path = target_file_path
-        self.tile_x_num = tile_x_num
-        self.tile_y_num = tile_y_num
-        self.tile_x_size = tile_x_size
-        self.tile_y_size = tile_y_size
-        self.pixel_type = image_codec_types.parse_pixel_type(pixel_type)
+        self.symbol_type = symbol_codec.parse_symbol_type(symbol_type)
+        self.dim = dim
+        self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size = self.dim
         self.state = State.INFO
         self.task_status_auto_update = False
         self.task_status_auto_update_threshold = 200
@@ -73,8 +71,8 @@ class App:
         self.auto_navigate_update_fps_interval = int(2000 / INTERVAL)
         self.auto_navigate_fps = 0
 
-        self.pixel_codec = pixel_codec.create_pixel_codec(self.pixel_type)
-        self.part_byte_num = image_decode_task.get_part_byte_num(self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size, self.pixel_type)
+        self.symbol_codec = symbol_codec.create_symbol_codec(self.symbol_type)
+        self.part_byte_num = image_decode_task.get_part_byte_num(self.symbol_type, self.dim)
         assert self.part_byte_num >= image_decode_task.Task.min_part_byte_num
         self.raw_bytes, self.part_num = image_decode_task.get_task_bytes(self.target_file_path, self.part_byte_num)
         self.cur_part_id = 0
@@ -143,8 +141,8 @@ class App:
 
     def draw_part(self, part_id):
         part_bytes = bytes(self.raw_bytes[part_id*self.part_byte_num:(part_id+1)*self.part_byte_num])
-        pixels = self.pixel_codec.encode(part_id, part_bytes, self.tile_x_num * self.tile_y_num * self.tile_x_size * self.tile_y_size)
-        data = [[[[pixels[((tile_y_id * self.tile_x_num + tile_x_id) * self.tile_y_size + y) * self.tile_x_size + x]
+        symbols = self.symbol_codec.encode(part_id, part_bytes, self.tile_x_num * self.tile_y_num * self.tile_x_size * self.tile_y_size)
+        data = [[[[symbols[((tile_y_id * self.tile_x_num + tile_x_id) * self.tile_y_size + y) * self.tile_x_size + x]
             for x in range(self.tile_x_size)]
             for y in range(self.tile_y_size)]
             for tile_x_id in range(self.tile_x_num)]
@@ -174,25 +172,25 @@ class App:
                             if self.is_tile_border(x, y):
                                 self.draw_color_pixel(tile_x+x, tile_y+y, BLACK_COLOR_PAIR)
                             else:
-                                pixel = data[tile_y_id][tile_x_id][y-1][x-1]
-                                if pixel == image_codec_types.PixelValue.WHITE.value:
+                                symbol = data[tile_y_id][tile_x_id][y-1][x-1]
+                                if symbol == image_codec_types.PixelColor.WHITE.value:
                                     color_pair = WHITE_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.BLACK.value:
+                                elif symbol == image_codec_types.PixelColor.BLACK.value:
                                     color_pair = BLACK_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.RED.value:
+                                elif symbol == image_codec_types.PixelColor.RED.value:
                                     color_pair = RED_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.BLUE.value:
+                                elif symbol == image_codec_types.PixelColor.BLUE.value:
                                     color_pair = BLUE_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.GREEN.value:
+                                elif symbol == image_codec_types.PixelColor.GREEN.value:
                                     color_pair = GREEN_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.CYAN.value:
+                                elif symbol == image_codec_types.PixelColor.CYAN.value:
                                     color_pair = CYAN_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.MAGENTA.value:
+                                elif symbol == image_codec_types.PixelColor.MAGENTA.value:
                                     color_pair = MAGENTA_COLOR_PAIR
-                                elif pixel == image_codec_types.PixelValue.YELLOW.value:
+                                elif symbol == image_codec_types.PixelColor.YELLOW.value:
                                     color_pair = YELLOW_COLOR_PAIR
                                 else:
-                                    assert 0, 'invalid pixel \'{}\''.format(pixel)
+                                    assert 0, 'invalid symbol \'{}\''.format(symbol)
                                 self.draw_color_pixel(tile_x+x, tile_y+y, color_pair)
         self.stdscr.refresh()
 
@@ -268,9 +266,9 @@ class App:
             with open(task_status_file_path, 'rb') as f:
                 task_bytes = f.read()
             if task_bytes:
-                dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+                symbol_type, dim, part_num, done_part_num, task_status_bytes = image_decode_task.from_task_bytes(task_bytes)
+                assert symbol_type == self.symbol_type
                 assert dim == (self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size)
-                assert pixel_type == self.pixel_type
                 assert part_num == self.part_num
                 assert len(task_status_bytes) == (self.part_num + 7) // 8
                 self.undone_part_ids = [part_id for part_id in range(self.part_num) if not image_decode_task.is_part_done(task_status_bytes, part_id)]
@@ -283,11 +281,11 @@ class App:
         else:
             return False
 
-def main(stdscr, target_file_path, dim, pixel_type):
-    tile_x_num, tile_y_num, tile_x_size, tile_y_size = map(int, dim.split(','))
+def main(stdscr, target_file_path, symbol_type, dim):
+    tile_x_num, tile_y_num, tile_x_size, tile_y_size = dim
     assert curses.can_change_color(), 'color not supported'
-    required_cols = PIXEL_WIDTH * (tile_x_size + 2)
-    required_lines = PIXEL_HEIGHT * (tile_y_size + 2)
+    required_cols = PIXEL_WIDTH * (tile_x_num * (tile_x_size + 2) + (tile_x_num - 1))
+    required_lines = PIXEL_HEIGHT * (tile_y_num * (tile_y_size + 2) + (tile_y_num - 1))
     assert curses.COLS >= required_cols, '{} cols required instead of {}'.format(required_cols, curses.COLS)
     assert curses.LINES >= required_lines, '{} lines required instead of {}'.format(required_lines, curses.LINES)
 
@@ -311,7 +309,7 @@ def main(stdscr, target_file_path, dim, pixel_type):
     curses.init_pair(MAGENTA_COLOR_PAIR, COLOR_WHITE, COLOR_MAGENTA)
     curses.init_pair(YELLOW_COLOR_PAIR, COLOR_WHITE, COLOR_YELLOW)
 
-    app = App(stdscr, target_file_path, tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type)
+    app = App(stdscr, target_file_path, symbol_type, dim)
     app.main_loop()
 
 if __name__ == '__main__':
@@ -319,8 +317,9 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
     parser.add_argument('target_file_path', help='target file_path')
+    parser.add_argument('symbol_type', help='symbol type')
     parser.add_argument('dim', help='dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size')
-    parser.add_argument('pixel_type', help='pixel type')
     args = parser.parse_args()
 
-    curses.wrapper(main, args.target_file_path, args.dim, args.pixel_type)
+    dim = image_codec_types.parse_dim(args.dim)
+    curses.wrapper(main, args.target_file_path, args.symbol_type, dim)

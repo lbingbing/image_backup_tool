@@ -1,17 +1,13 @@
 import os
+import io
 import struct
 
-import image_codec_types
-import pixel_codec
+import symbol_codec
 
 class FinalizationProgress:
     def __init__(self):
         self.done_block_num = 0
         self.block_num = 0
-
-def get_part_byte_num(tile_x_num, tile_y_num, tile_x_size, tile_y_size, pixel_type):
-    codec = pixel_codec.create_pixel_codec(pixel_type)
-    return tile_x_num * tile_y_num * tile_x_size * tile_y_size * codec.bit_num_per_pixel // 8 - codec.meta_byte_num
 
 class Task:
     min_part_byte_num = 8
@@ -25,11 +21,9 @@ class Task:
         self.finalization_progress_cb = None
         self.finalization_complete_cb = None
 
-    def init(self, dim, pixel_type, pixel_size, space_size, part_num):
+    def init(self, symbol_type, dim, part_num):
+        self.symbol_type = symbol_type
         self.dim = dim
-        self.pixel_type = pixel_type
-        self.pixel_size = pixel_size
-        self.space_size = space_size
         self.part_num = part_num
         self.done_part_num = 0
         self.task_status_bytes = bytearray([0] * ((part_num + 7) // 8))
@@ -37,10 +31,10 @@ class Task:
     def load(self):
         with open(self.task_path, 'rb') as task_file:
             task_bytes = task_file.read()
-        *dim, pixel_type, self.pixel_size, self.space_size, self.part_num, self.done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
+        symbol_type, *dim, self.part_num, self.done_part_num = struct.unpack('<IIIIIII', task_bytes[:28])
+        self.symbol_type = symbol_codec.SymbolType(symbol_type)
         self.dim = tuple(dim)
-        self.pixel_type = image_codec_types.PixelType(pixel_type)
-        self.task_status_bytes = bytearray(task_bytes[36:])
+        self.task_status_bytes = bytearray(task_bytes[28:])
 
     def set_finalization_cb(self, finalization_start_cb, finalization_progress_cb, finalization_complete_cb):
         self.finalization_start_cb = finalization_start_cb
@@ -51,7 +45,7 @@ class Task:
         if os.path.isfile(self.blob_path):
             return True
         with open(self.blob_path, 'wb') as blob_file:
-            part_byte_num = get_part_byte_num(*self.dim, self.pixel_type)
+            part_byte_num = get_part_byte_num(self.symbol_type, self.dim)
             blob_file.truncate(part_byte_num * self.part_num)
         return True
 
@@ -75,7 +69,7 @@ class Task:
             self.flush()
 
     def to_task_bytes(self):
-        task_info_bytes = struct.pack('<IIIIIIIII', *self.dim, self.pixel_type.value, self.pixel_size, self.space_size, self.part_num, self.done_part_num)
+        task_info_bytes = struct.pack('<IIIIIII', self.symbol_type.value, *self.dim, self.part_num, self.done_part_num)
         return task_info_bytes + self.task_status_bytes
 
     def flush(self):
@@ -86,7 +80,7 @@ class Task:
         self.blob_buf = []
 
         with open(self.task_path, 'wb') as task_file:
-            task_info_bytes = struct.pack('<IIIIIIIII', *self.dim, self.pixel_type.value, self.pixel_size, self.space_size, self.part_num, self.done_part_num)
+            task_info_bytes = struct.pack('<IIIIIII', self.symbol_type.value, *self.dim, self.part_num, self.done_part_num)
             task_file.write(task_info_bytes)
             task_file.write(self.task_status_bytes)
 
@@ -96,7 +90,7 @@ class Task:
     def finalize(self):
         self.flush()
         with open(self.blob_path, 'r+b') as blob_file:
-            part_byte_num = get_part_byte_num(*self.dim, self.pixel_type)
+            part_byte_num = get_part_byte_num(self.symbol_type, self.dim)
             blob_file.seek(part_byte_num * (self.part_num - 1), io.SEEK_SET);
             file_size_bytes = blob_file.read(8)
             file_size = struct.unpack('<Q', file_size_bytes)[0]
@@ -107,10 +101,8 @@ class Task:
             self.finalization_complete_cb()
 
     def print(self, show_undone_part_num):
+        print('symbol_type={}'.format(self.symbol_type.name))
         print('dim={}'.format(self.dim))
-        print('pixel_type={}'.format(self.pixel_type.name))
-        print('pixel_size={}'.format(self.pixel_size))
-        print('space_size={}'.format(self.space_size))
         print('part_num={}'.format(self.part_num))
         print('done_part_num={}'.format(self.done_part_num))
         print('undone parts:')
@@ -122,24 +114,32 @@ class Task:
                     if show_undone_part_num == 0:
                         break
 
+def get_part_byte_num(symbol_type, dim):
+    tile_x_num, tile_y_num, tile_x_size, tile_y_size = dim
+    codec = symbol_codec.create_symbol_codec(symbol_type)
+    return tile_x_num * tile_y_num * tile_x_size * tile_y_size * codec.bit_num_per_symbol // 8 - codec.meta_byte_num
+
 def get_task_bytes(file_path, part_byte_num):
     with open(file_path, 'rb') as f:
-        file_bytes = bytearray(f.read())
-    file_size = len(file_bytes)
+        raw_bytes = bytearray(f.read())
+    file_size = len(raw_bytes)
     left_bytes_num1 = file_size % part_byte_num
     padding_bytes1 = bytes([0] * (part_byte_num - left_bytes_num1)) if left_bytes_num1 else b''
     size_bytes = bytearray(struct.pack('<Q', file_size))
     padding_bytes2 = bytes([0] * (part_byte_num - len(size_bytes)))
-    raw_bytes = file_bytes + padding_bytes1 + size_bytes + padding_bytes2
+    raw_bytes += padding_bytes1 + size_bytes + padding_bytes2
     part_num = len(raw_bytes) // part_byte_num
     return raw_bytes, part_num
 
 def from_task_bytes(task_bytes):
-    *dim, pixel_type, pixel_size, space_size, part_num, done_part_num = struct.unpack('<IIIIIIIII', task_bytes[:36])
+    symbol_type, *dim, part_num, done_part_num = struct.unpack('<IIIIIII', task_bytes[:28])
     dim = tuple(dim)
-    pixel_type = image_codec_types.PixelType(pixel_type)
-    task_status_bytes = task_bytes[36:]
-    return dim, pixel_type, pixel_size, space_size, part_num, done_part_num, task_status_bytes
+    symbol_type = symbol_codec.SymbolType(symbol_type)
+    task_status_bytes = task_bytes[28:]
+    expected_task_byte_num = 4 * 7 + (part_num + 7) // 8
+    if len(task_bytes) != expected_task_byte_num:
+        raise image_codec_types.InvalidImageCodecArgument('invalid task bytes of size \'{}\', \'{}\' expected'.format(len(task_bytes), expected_task_byte_num))
+    return symbol_type, dim, part_num, done_part_num, task_status_bytes
 
 def is_part_done(task_status_bytes, part_id):
     byte_index = part_id // 8

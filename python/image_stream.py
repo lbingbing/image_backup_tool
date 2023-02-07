@@ -3,8 +3,10 @@ import re
 import struct
 import base64
 import threading
+import socket
 
-import cv2
+import numpy as np
+import cv2 as cv
 
 class ImageStream:
     def get_frame(self):
@@ -14,10 +16,10 @@ class CameraImageStream(ImageStream):
     def __init__(self, url, scale):
         if not url.startswith('http'):
             url = int(url)
-        self.cap = cv2.VideoCapture(url)
+        self.cap = cv.VideoCapture(url)
         if self.cap.isOpened():
-            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.cap.get(cv2.CAP_PROP_FRAME_WIDTH) * scale)
-            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT) * scale)
+            self.cap.set(cv.CAP_PROP_FRAME_WIDTH, self.cap.get(cv.CAP_PROP_FRAME_WIDTH) * scale)
+            self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) * scale)
 
     def close(self):
         if self.cap.isOpened():
@@ -36,17 +38,19 @@ class ThreadedImageStream(ImageStream):
         self.worker_thread = None
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
-        self.stop = False
+        self.running = False
 
-    def close():
+    def close(self):
         with self.lock:
-            stop = self.stop
-        if not stop:
-            self.join()
+            was_running = self.running
+            self.running = False
+        if was_running:
+            self.worker_thread.join()
+            self.worker_thread = None
 
     def get_frame(self):
         with self.cv:
-            self.cv.wait_for(lambda: self.stop or self.size)
+            self.cv.wait_for(lambda: not self.running or self.size)
             frame = None
             if self.size:
                 frame = self.ring_buffer[self.rptr]
@@ -55,17 +59,9 @@ class ThreadedImageStream(ImageStream):
         return frame
 
     def start(self):
+        self.running = True
         self.worker_thread = threading.Thread(target=self.worker)
         self.worker_thread.start()
-
-    def stop(self):
-        with self.lock:
-            self.stop = True
-
-    def join(self):
-        self.stop()
-        self.worker_thread.join()
-        self.worker_thread = None
 
     def fetch_data(self):
         raise NotImplementedError()
@@ -73,12 +69,12 @@ class ThreadedImageStream(ImageStream):
     def worker(self):
         while True:
             with self.lock:
-                if self.stop:
+                if not self.running:
                     break
             data = self.fetch_data()
             frame = None
             if data:
-                frame = cv2.imdecode(data, cv2.IMREAD_COLOR)
+                frame = cv.imdecode(np.frombuffer(data, dtype=np.uint8), cv.IMREAD_COLOR)
             with self.cv:
                 self.ring_buffer[self.wptr] = frame
                 self.wptr = (self.wptr + 1) % len(self.ring_buffer)
@@ -114,16 +110,16 @@ class SocketImageStream(ThreadedImageStream):
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
             self.sock.connect((addr, port))
-        except Exception:
-            self.stop()
-        if self.stop:
             self.start()
+        except Exception:
+            pass
 
     def fetch_data(self):
         try:
             length_bytes = bytearray()
             while len(length_bytes) < 8:
                 length_bytes += self.sock.recv(8 - len(length_bytes))
+            length = struct.unpack('<Q', length_bytes)[0]
             data = bytearray()
             while len(data) < length:
                 data += self.sock.recv(length - len(data))
@@ -135,7 +131,7 @@ def create_image_stream():
     stream_type = 'camera'
     camera_url = 0
     scale = 1
-    buffer_size = 128
+    buffer_size = 64
     ip = '127.0.0.1'
     port = 8123
     type_pattern = r'^type=(\S+)$'

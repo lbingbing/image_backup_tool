@@ -1,22 +1,20 @@
 #include <sstream>
 #include <chrono>
-#include <atomic>
-#include <thread>
 #include <filesystem>
+#include <cmath>
 
 #include "image_decode_worker.h"
 #include "image_stream.h"
 
-ImageDecodeWorker::ImageDecodeWorker(PixelType pixel_type) : m_image_decoder(pixel_type) {
+ImageDecodeWorker::ImageDecodeWorker(SymbolType symbol_type) : m_image_decoder(symbol_type) {
 }
 
 void ImageDecodeWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, int interval) {
-    cv::Mat frame;
     uint64_t frame_id = 0;
     while (running) {
         auto image_stream = create_image_stream();
         while (running) {
-            frame = image_stream->GetFrame();
+            auto frame = image_stream->GetFrame();
             if (frame.empty()) break;
             frame_q.Emplace(frame_id, frame);
             ++frame_id;
@@ -56,7 +54,7 @@ void ImageDecodeWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& part_q,
         auto data = frame_q.Pop();
         if (!data) break;
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, false);
+        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, false);
         part_q.Emplace(success, part_id, part_bytes);
     }
 }
@@ -69,7 +67,7 @@ void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q
             break;
         }
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, true);
+        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, true);
         part_q.Emplace(success, part_id, part_bytes);
         send_decode_image_result_cb(frame1, success, result_imgs);
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
@@ -95,7 +93,7 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
             transform.pixelization_threshold[0] = cur_pixelization_threshold;
             transform.pixelization_threshold[1] = cur_pixelization_threshold;
             transform.pixelization_threshold[2] = cur_pixelization_threshold;
-            auto [success, part_id, part_bytes, part_pixels, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, transform, calibration, false);
+            auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, transform, calibration, false);
             if (!has_succeeded && (success || i == LOOP_NUM - 1)) {
                 part_q.Emplace(success, part_id, part_bytes);
                 has_succeeded = true;
@@ -106,16 +104,16 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
         ++frame_num;
         if ((frame_num & 0x7f) == 0) {
             float total_score = 0.0f;
-            float sum = 0.0f;
-            for (int threshold = 0; threshold < THRESHOLD_NUM; threshold++) {
-                total_score += pixelization_threshold_scores[threshold];
-                sum += pixelization_threshold_scores[threshold] * threshold;
+            float weighted_sum = 0.0f;
+            for (int pixelization_threshold = 0; pixelization_threshold < THRESHOLD_NUM; pixelization_threshold++) {
+                total_score += pixelization_threshold_scores[pixelization_threshold];
+                weighted_sum += pixelization_threshold_scores[pixelization_threshold] * pixelization_threshold;
             }
             if (total_score > 0) {
-                int threshold = sum / total_score;
-                transform.pixelization_threshold[0] = threshold;
-                transform.pixelization_threshold[1] = threshold;
-                transform.pixelization_threshold[2] = threshold;
+                int pixelization_threshold = static_cast<int>(std::round(weighted_sum / total_score));
+                transform.pixelization_threshold[0] = pixelization_threshold;
+                transform.pixelization_threshold[1] = pixelization_threshold;
+                transform.pixelization_threshold[2] = pixelization_threshold;
                 send_auto_trasform_cb(transform);
             }
         }
@@ -123,26 +121,22 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
     }
 }
 
-void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, int pixel_size, int space_size, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
-    PixelType pixel_type = m_image_decoder.GetPixelCodec().GetPixelType();
+void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
+    SymbolType symbol_type = m_image_decoder.GetSymbolCodec().GetSymbolType();
     Task task(output_file);
     if (std::filesystem::is_regular_file(task.TaskPath())) {
         task.Load();
-        if (dim != task.GetDim() || pixel_size != task.GetPixelSize() || part_num != task.GetPartNum()) {
+        if (symbol_type != task.GetSymbolType() || dim != task.GetDim() || part_num != task.GetPartNum()) {
             if (error_cb) {
                 std::ostringstream oss;
                 oss << "inconsistent task config\n";
                 oss << "task:\n";
+                oss << "symbol_type=" << get_symbol_type_str(task.GetSymbolType()) << "\n";
                 oss << "dim=" << task.GetDim() << "\n";
-                oss << "pixel_type=" << get_pixel_type_str(task.GetPixelType()) << "\n";
-                oss << "pixel_size=" << task.GetPixelSize() << "\n";
-                oss << "space_size=" << task.GetSpaceSize() << "\n";
                 oss << "part_num=" << task.GetPartNum() << "\n";
                 oss << "input:\n";
+                oss << "symbol_type=" << get_symbol_type_str(symbol_type) << "\n";
                 oss << "dim=" << dim << "\n";
-                oss << "pixel_type=" << get_pixel_type_str(pixel_type) << "\n";
-                oss << "pixel_size=" << pixel_size << "\n";
-                oss << "space_size=" << space_size << "\n";
                 oss << "part_num=" << part_num << "\n";
                 error_cb(oss.str());
             }
@@ -151,7 +145,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
             return;
         }
     } else {
-        task.Init(dim, pixel_type, pixel_size, space_size, part_num);
+        task.Init(symbol_type, dim, part_num);
         bool success = task.AllocateBlob();
         if (!success) {
             if (error_cb) {
@@ -172,7 +166,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
     float done_fps = 0;
     uint32_t done_part_num0 = task.DonePartNum();
     float bps = 0;
-    float bpf = static_cast<float>(get_part_byte_num(dim, pixel_type));
+    float bpf = static_cast<float>(get_part_byte_num(symbol_type, dim));
     int left_days = 0;
     int left_hours = 0;
     int left_minutes = 0;

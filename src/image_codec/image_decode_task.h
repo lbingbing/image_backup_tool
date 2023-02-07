@@ -21,7 +21,7 @@ public:
     static constexpr int MIN_PART_BYTE_NUM = 8;
 
     IMAGE_CODEC_API Task(const std::string& path);
-    IMAGE_CODEC_API void Init(const Dim& dim, PixelType pixel_type, int pixel_size, int space_size, uint32_t part_num);
+    IMAGE_CODEC_API void Init(SymbolType symbol_type, const Dim& dim, uint32_t part_num);
     IMAGE_CODEC_API void Load();
     IMAGE_CODEC_API void SetFinalizationCb(FinalizationStartCb finalization_start_cb, FinalizationProgressCb finalization_progress_cb, FinalizationCompleteCb finalization_complete_cb);
     IMAGE_CODEC_API bool AllocateBlob();
@@ -31,27 +31,23 @@ public:
     IMAGE_CODEC_API void Finalize();
     IMAGE_CODEC_API void Print(int64_t show_undone_part_num) const;
 
-    uint32_t DonePartNum() const { return m_done_part_num; }
-    const std::string& TaskPath() const { return m_task_path; }
-    const std::string& BlobPath() const { return m_blob_path; }
-    Dim GetDim() const { return m_dim; }
-    PixelType GetPixelType() const { return m_pixel_type; }
-    int GetPixelSize() const { return m_pixel_size; }
-    int GetSpaceSize() const { return m_space_size; }
-    uint32_t GetPartNum() const { return m_part_num; }
-    Bytes ToTaskBytes() const;
+    IMAGE_CODEC_API uint32_t DonePartNum() const { return m_done_part_num; }
+    IMAGE_CODEC_API const std::string& TaskPath() const { return m_task_path; }
+    IMAGE_CODEC_API const std::string& BlobPath() const { return m_blob_path; }
+    IMAGE_CODEC_API SymbolType GetSymbolType() const { return m_symbol_type; }
+    IMAGE_CODEC_API Dim GetDim() const { return m_dim; }
+    IMAGE_CODEC_API uint32_t GetPartNum() const { return m_part_num; }
+    IMAGE_CODEC_API Bytes ToTaskBytes() const;
 
 private:
-    IMAGE_CODEC_API bool IsPartDone(uint32_t part_id) const;
+    bool IsPartDone(uint32_t part_id) const;
 
     std::string m_path;
     std::string m_task_path;
     std::string m_blob_path;
 
+    SymbolType m_symbol_type = SymbolType::SYMBOL1;
     Dim m_dim;
-    PixelType m_pixel_type = PixelType::PIXEL2;
-    int m_pixel_size = 0;
-    int m_space_size = 0;
     uint32_t m_part_num = 0;
     uint32_t m_done_part_num = 0;
     Bytes m_task_status_bytes;
@@ -63,5 +59,7 @@ private:
     FinalizationCompleteCb m_finalization_complete_cb;
 };
 
-IMAGE_CODEC_API uint32_t get_part_byte_num(const Dim& dim, PixelType pixel_type);
+IMAGE_CODEC_API uint32_t get_part_byte_num(SymbolType symbol_type, const Dim& dim);
+IMAGE_CODEC_API std::pair<Bytes, uint32_t> get_task_bytes(const std::string& file_path, uint32_t part_byte_num);
+IMAGE_CODEC_API std::tuple<SymbolType, Dim, uint32_t, uint32_t, Bytes> from_task_bytes(const Bytes& task_bytes);
 IMAGE_CODEC_API bool is_part_done(const Bytes& task_status_bytes, uint32_t part_id);

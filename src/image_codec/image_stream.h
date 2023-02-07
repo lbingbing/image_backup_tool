@@ -1,23 +1,22 @@
 #pragma once
 
-#include <fstream>
 #include <boost/asio.hpp>
 #include <opencv2/opencv.hpp>
 
 #include "image_codec_api.h"
-#include "pixel_codec.h"
+#include "image_codec_types.h"
 
 class ImageStream {
 public:
-    virtual ~ImageStream() {}
-    virtual cv::Mat GetFrame() = 0;
+    IMAGE_CODEC_API virtual ~ImageStream() {}
+    IMAGE_CODEC_API virtual cv::Mat GetFrame() = 0;
 };
 
 class CameraImageStream : public ImageStream {
 public:
-    CameraImageStream(const std::string& url, int scale = 1);
-    ~CameraImageStream();
-    cv::Mat GetFrame() override;
+    IMAGE_CODEC_API CameraImageStream(const std::string& url, int scale = 1);
+    IMAGE_CODEC_API ~CameraImageStream();
+    IMAGE_CODEC_API cv::Mat GetFrame() override;
 
 private:
     cv::VideoCapture m_cap;
@@ -25,18 +24,15 @@ private:
 
 class ThreadedImageStream : public ImageStream {
 public:
-    ThreadedImageStream(size_t buffer_size) : m_ring_buffer(buffer_size) {}
-    virtual ~ThreadedImageStream();
-    cv::Mat GetFrame() override;
+    IMAGE_CODEC_API ThreadedImageStream(size_t buffer_size) : m_ring_buffer(buffer_size) {}
+    IMAGE_CODEC_API virtual ~ThreadedImageStream();
+    IMAGE_CODEC_API cv::Mat GetFrame() override;
 
 protected:
-    void Start();
-    void Stop();
-    bool IsStopped() const;
-    virtual Bytes FetchData() = 0;
+    IMAGE_CODEC_API void Start();
+    IMAGE_CODEC_API virtual Bytes FetchData() = 0;
 
 private:
-    void Join();
     void Worker();
     void IncPtr(size_t& ptr);
 
@@ -47,23 +43,23 @@ private:
     std::thread m_thread;
     std::mutex m_mtx;
     std::condition_variable m_cv;
-    std::atomic<bool> m_stop = false;
+    std::atomic<bool> m_runnning = false;
 };
 
 class PipeImageStream : public ThreadedImageStream {
 public:
-    PipeImageStream(size_t buffer_size);
+    IMAGE_CODEC_API PipeImageStream(size_t buffer_size);
 
 protected:
-    Bytes FetchData() override;
+    IMAGE_CODEC_API Bytes FetchData() override;
 };
 
 class SocketImageStream : public ThreadedImageStream {
 public:
-    SocketImageStream(const std::string& addr, int port, size_t buffer_size);
+    IMAGE_CODEC_API SocketImageStream(const std::string& addr, int port, size_t buffer_size);
 
 protected:
-    Bytes FetchData() override;
+    IMAGE_CODEC_API Bytes FetchData() override;
 
 private:
     boost::asio::io_context io_context;

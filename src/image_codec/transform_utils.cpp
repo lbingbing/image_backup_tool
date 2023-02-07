@@ -22,8 +22,18 @@ void Transform::Save(const std::string& path) {
     f.write(reinterpret_cast<char*>(pixelization_threshold.data()), sizeof(int) * pixelization_threshold.size());
 }
 
+template <typename T, size_t N>
+std::string array_to_string(const std::array<T, N>& arr) {
+    std::ostringstream oss;
+    for (size_t i = 0; i < arr.size(); ++i) {
+        if (i > 0) oss << ",";
+        oss << arr[i];
+    }
+    return oss.str();
+}
+
 template <typename T>
-std::string vec_to_string(const std::vector<T>& vec) {
+std::string vector_to_string(const std::vector<T>& vec) {
     std::ostringstream oss;
     for (size_t i = 0; i < vec.size(); ++i) {
         if (i > 0) oss << ",";
@@ -33,66 +43,66 @@ std::string vec_to_string(const std::vector<T>& vec) {
 }
 
 std::ostream& operator<<(std::ostream& os, const Transform& transform) {
-    os << "bbox: [" << vec_to_string(transform.bbox) << "]\n";
-    os << "sphere: [" << vec_to_string(transform.sphere) << "]\n";
+    os << "bbox: [" << array_to_string(transform.bbox) << "]\n";
+    os << "sphere: [" << array_to_string(transform.sphere) << "]\n";
     os << "filter_level: " << transform.filter_level << "\n";
     os << "binarization_threshold: " << transform.binarization_threshold << "\n";
-    os << "pixelization_threshold: [" << vec_to_string(transform.pixelization_threshold) << "]\n";
+    os << "pixelization_threshold: [" << array_to_string(transform.pixelization_threshold) << "]\n";
     return os;
 }
 
-std::vector<float> parse_bbox(const std::string& bbox_str) {
-    std::vector<float> bbox;
+Transform::Bbox parse_bbox(const std::string& bbox_str) {
+    Transform::Bbox bbox;
     bool fail = false;
     try {
-        bbox = parse_vec<float>(bbox_str);
+        bbox = parse_array<std::tuple_element<0, Transform::Bbox>::type, std::tuple_size<Transform::Bbox>::value>(bbox_str);
     }
     catch (const std::exception&) {
         fail = true;
     }
-    if (fail || bbox.size() != 4 || bbox[0] < 0 || bbox[1] < 0 || bbox[2] > 1 || bbox[3] > 1) {
+    if (fail || bbox[0] < 0 || bbox[1] < 0 || bbox[2] > 1 || bbox[3] > 1) {
         throw invalid_image_codec_argument("invalid bbox '" + bbox_str + "'");
     }
     return bbox;
 }
 
-std::string get_bbox_str(const std::vector<float>& bbox) {
-    return vec_to_string(bbox);
+std::string get_bbox_str(const Transform::Bbox& bbox) {
+    return array_to_string(bbox);
 }
 
-std::vector<int> get_bbox(const cv::Mat& img, const std::vector<float>& bbox) {
-    return std::vector<int>({
+std::array<int, 4> get_bbox(const cv::Mat& img, const Transform::Bbox& bbox) {
+    return std::array<int, 4>{
         static_cast<int>(img.cols * bbox[0]),
         static_cast<int>(img.rows * bbox[1]),
         static_cast<int>(img.cols * bbox[2]),
         static_cast<int>(img.rows * bbox[3]),
-    });
+    };
 }
 
-cv::Mat do_crop(const cv::Mat& img, const std::vector<int>& bbox) {
+cv::Mat do_crop(const cv::Mat& img, const std::array<int, 4>& bbox) {
     return cv::Mat(img, cv::Rect(bbox[0], bbox[1], bbox[2] - bbox[0], bbox[3] - bbox[1]));
 }
 
-std::vector<float> parse_sphere(const std::string& sphere_str) {
-    std::vector<float> sphere;
+Transform::Sphere parse_sphere(const std::string& sphere_str) {
+    Transform::Sphere sphere;
     bool fail = false;
     try {
-        sphere = parse_vec<float>(sphere_str);
+        sphere = parse_array<std::tuple_element<0, Transform::Sphere>::type, std::tuple_size<Transform::Sphere>::value>(sphere_str);
     }
     catch (const std::exception&) {
         fail = true;
     }
-    if (fail || sphere.size() != 4) {
+    if (fail) {
         throw invalid_image_codec_argument("invalid sphere coeff '" + sphere_str + "'");
     }
     return sphere;
 }
 
-std::string get_sphere_str(const std::vector<float>& sphere) {
-    return vec_to_string(sphere);
+std::string get_sphere_str(const Transform::Sphere& sphere) {
+    return array_to_string(sphere);
 }
 
-cv::Mat do_sphere(const cv::Mat& img, const std::vector<float>& sphere) {
+cv::Mat do_sphere(const cv::Mat& img, const Transform::Sphere& sphere) {
     auto cols0 = img.cols / 2;
     auto rows0 = img.rows / 2;
     auto cols1 = img.cols - cols0;
@@ -101,53 +111,53 @@ cv::Mat do_sphere(const cv::Mat& img, const std::vector<float>& sphere) {
     cv::Mat img_sw = img(cv::Rect(0, rows0, cols0, rows1));
     cv::Mat img_se = img(cv::Rect(cols0, rows0, cols1, rows1));
     cv::Mat img_ne = img(cv::Rect(cols0, 0, cols1, rows0));
-    std::vector<cv::Point2f> src_corners_nw{
-        {0.f, 0.f},
-        {-sphere[0] * cols0, static_cast<float>(rows0)},
-        {static_cast<float>(cols0), static_cast<float>(rows0)},
-        {static_cast<float>(cols0), -sphere[1] * rows0},
+    std::array<cv::Point2f, 4> src_corners_nw{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{-sphere[0] * cols0, static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols0), static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols0), -sphere[1] * rows0},
     };
-    std::vector<cv::Point2f> src_corners_sw{
-        {-sphere[0] * cols0, 0.f},
-        {0.f, static_cast<float>(rows1)},
-        {static_cast<float>(cols0), (1 + sphere[3]) * rows1},
-        {static_cast<float>(cols0), 0.f},
+    std::array<cv::Point2f, 4> src_corners_sw{
+        cv::Point2f{-sphere[0] * cols0, 0.f},
+        cv::Point2f{0.f, static_cast<float>(rows1)},
+        cv::Point2f{static_cast<float>(cols0), (1 + sphere[3]) * rows1},
+        cv::Point2f{static_cast<float>(cols0), 0.f},
     };
-    std::vector<cv::Point2f> src_corners_se{
-        {0.f, 0.f},
-        {0.f, (1 + sphere[3]) * rows1},
-        {static_cast<float>(cols1), static_cast<float>(rows1)},
-        {(1 + sphere[2]) * cols1, 0.f},
+    std::array<cv::Point2f, 4> src_corners_se{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, (1 + sphere[3]) * rows1},
+        cv::Point2f{static_cast<float>(cols1), static_cast<float>(rows1)},
+        cv::Point2f{(1 + sphere[2]) * cols1, 0.f},
     };
-    std::vector<cv::Point2f> src_corners_ne{
-        {0.f, -sphere[1] * rows0},
-        {0.f, static_cast<float>(rows0)},
-        {(1 + sphere[2]) * cols1, static_cast<float>(rows0)},
-        {static_cast<float>(cols1), 0.f},
+    std::array<cv::Point2f, 4> src_corners_ne{
+        cv::Point2f{0.f, -sphere[1] * rows0},
+        cv::Point2f{0.f, static_cast<float>(rows0)},
+        cv::Point2f{(1 + sphere[2]) * cols1, static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols1), 0.f},
     };
-    std::vector<cv::Point2f> dst_corners_nw{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(rows0)},
-        {static_cast<float>(cols0), static_cast<float>(rows0)},
-        {static_cast<float>(cols0), 0.f},
+    std::array<cv::Point2f, 4> dst_corners_nw{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols0), static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols0), 0.f},
     };
-    std::vector<cv::Point2f> dst_corners_sw{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(rows1)},
-        {static_cast<float>(cols0), static_cast<float>(rows1)},
-        {static_cast<float>(cols0), 0.f},
+    std::array<cv::Point2f, 4> dst_corners_sw{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(rows1)},
+        cv::Point2f{static_cast<float>(cols0), static_cast<float>(rows1)},
+        cv::Point2f{static_cast<float>(cols0), 0.f},
     };
-    std::vector<cv::Point2f> dst_corners_se{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(rows1)},
-        {static_cast<float>(cols1), static_cast<float>(rows1)},
-        {static_cast<float>(cols1), 0.f},
+    std::array<cv::Point2f, 4> dst_corners_se{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(rows1)},
+        cv::Point2f{static_cast<float>(cols1), static_cast<float>(rows1)},
+        cv::Point2f{static_cast<float>(cols1), 0.f},
     };
-    std::vector<cv::Point2f> dst_corners_ne{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(rows0)},
-        {static_cast<float>(cols1), static_cast<float>(rows0)},
-        {static_cast<float>(cols1), 0.f},
+    std::array<cv::Point2f, 4> dst_corners_ne{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols1), static_cast<float>(rows0)},
+        cv::Point2f{static_cast<float>(cols1), 0.f},
     };
     cv::Mat mat_nw = cv::getPerspectiveTransform(src_corners_nw, dst_corners_nw);
     cv::Mat mat_sw = cv::getPerspectiveTransform(src_corners_sw, dst_corners_sw);
@@ -169,37 +179,37 @@ cv::Mat do_sphere(const cv::Mat& img, const std::vector<float>& sphere) {
     return img1;
 }
 
-std::vector<float> parse_quad(const std::string& quad_str) {
-    std::vector<float> quad;
+Transform::Quad parse_quad(const std::string& quad_str) {
+    Transform::Quad quad;
     bool fail = false;
     try {
-        quad = parse_vec<float>(quad_str);
+        quad = parse_array<std::tuple_element<0, Transform::Quad>::type, std::tuple_size<Transform::Quad>::value>(quad_str);
     }
     catch (const std::exception&) {
         fail = true;
     }
-    if (fail || quad.size() != 8) {
+    if (fail) {
         throw invalid_image_codec_argument("invalid quad coeff '" + quad_str + "'");
     }
     return quad;
 }
 
-std::string get_quad_str(const std::vector<float>& quad) {
-    return vec_to_string(quad);
+std::string get_quad_str(const Transform::Quad& quad) {
+    return array_to_string(quad);
 }
 
-cv::Mat do_quad(const cv::Mat& img, const std::vector<float>& quad) {
-    std::vector<cv::Point2f> src_corners{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(img.rows)},
-        {static_cast<float>(img.cols), static_cast<float>(img.rows)},
-        {static_cast<float>(img.cols), 0.f},
+cv::Mat do_quad(const cv::Mat& img, const Transform::Quad& quad) {
+    std::array<cv::Point2f, 4> src_corners{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(img.rows)},
+        cv::Point2f{static_cast<float>(img.cols), static_cast<float>(img.rows)},
+        cv::Point2f{static_cast<float>(img.cols), 0.f},
     };
-    std::vector<cv::Point2f> dst_corners{
-        {quad[0] * img.cols, quad[1] * img.rows},
-        {quad[2] * img.cols, (1 + quad[3]) * img.rows},
-        {(1 + quad[4]) * img.cols, (1 + quad[5]) * img.rows},
-        {(1 + quad[6]) * img.cols, quad[7] * img.rows},
+    std::array<cv::Point2f, 4> dst_corners{
+        cv::Point2f{quad[0] * img.cols, quad[1] * img.rows},
+        cv::Point2f{quad[2] * img.cols, (1 + quad[3]) * img.rows},
+        cv::Point2f{(1 + quad[4]) * img.cols, (1 + quad[5]) * img.rows},
+        cv::Point2f{(1 + quad[6]) * img.cols, quad[7] * img.rows},
     };
     cv::Mat mat = cv::getPerspectiveTransform(src_corners, dst_corners);
     cv::Mat img1;
@@ -207,7 +217,7 @@ cv::Mat do_quad(const cv::Mat& img, const std::vector<float>& quad) {
     return img1;
 }
 
-std::pair<int, int> detect_non_white_corner_nw(const cv::Mat& img) {
+std::array<int, 2> detect_non_white_corner_nw(const cv::Mat& img) {
     int row_num = img.rows;
     int col_num = img.cols;
     int i0 = 0;
@@ -216,7 +226,7 @@ std::pair<int, int> detect_non_white_corner_nw(const cv::Mat& img) {
         int i = i0;
         int j = j0;
         while (true) {
-            if (is_non_white(img, j, i)) return { j, i };
+            if (is_non_white(img, j, i)) return {j, i};
             if (i > 0) --i;
             else break;
             if (j < col_num - 1) ++j;
@@ -226,10 +236,10 @@ std::pair<int, int> detect_non_white_corner_nw(const cv::Mat& img) {
         else if (j0 < col_num - 1) ++j0;
         else break;
     }
-    return { 0, 0 };
+    return {0, 0};
 }
 
-std::pair<int, int> detect_non_white_corner_ne(const cv::Mat& img) {
+std::array<int, 2> detect_non_white_corner_ne(const cv::Mat& img) {
     int row_num = img.rows;
     int col_num = img.cols;
     int i0 = 0;
@@ -238,7 +248,7 @@ std::pair<int, int> detect_non_white_corner_ne(const cv::Mat& img) {
         int i = i0;
         int j = j0;
         while (true) {
-            if (is_non_white(img, j, i)) return { j, i };
+            if (is_non_white(img, j, i)) return {j, i};
             if (i < row_num - 1) ++i;
             else break;
             if (j < col_num - 1) ++j;
@@ -248,10 +258,10 @@ std::pair<int, int> detect_non_white_corner_ne(const cv::Mat& img) {
         else if (i0 < row_num - 1) ++i0;
         else break;
     }
-    return { 0, 0 };
+    return {0, 0};
 }
 
-std::pair<int, int> detect_non_white_corner_sw(const cv::Mat& img) {
+std::array<int, 2> detect_non_white_corner_sw(const cv::Mat& img) {
     int row_num = img.rows;
     int col_num = img.cols;
     int i0 = row_num - 1;
@@ -260,7 +270,7 @@ std::pair<int, int> detect_non_white_corner_sw(const cv::Mat& img) {
         int i = i0;
         int j = j0;
         while (true) {
-            if (is_non_white(img, j, i)) return { j, i };
+            if (is_non_white(img, j, i)) return {j, i};
             if (i < row_num - 1) ++i;
             else break;
             if (j < col_num - 1) ++j;
@@ -270,10 +280,10 @@ std::pair<int, int> detect_non_white_corner_sw(const cv::Mat& img) {
         else if (j0 < col_num - 1) ++j0;
         else break;
     }
-    return { 0, 0 };
+    return {0, 0};
 }
 
-std::pair<int, int> detect_non_white_corner_se(const cv::Mat& img) {
+std::array<int, 2> detect_non_white_corner_se(const cv::Mat& img) {
     int row_num = img.rows;
     int col_num = img.cols;
     int i0 = row_num - 1;
@@ -282,7 +292,7 @@ std::pair<int, int> detect_non_white_corner_se(const cv::Mat& img) {
         int i = i0;
         int j = j0;
         while (true) {
-            if (is_non_white(img, j, i)) return { j, i };
+            if (is_non_white(img, j, i)) return {j, i};
             if (i > 0) --i;
             else break;
             if (j < col_num - 1) ++j;
@@ -292,7 +302,7 @@ std::pair<int, int> detect_non_white_corner_se(const cv::Mat& img) {
         else if (i0 > 0) --i0;
         else break;
     }
-    return { 0, 0 };
+    return {0, 0};
 }
 
 cv::Mat do_auto_quad(const cv::Mat& img, int binarization_threshold) {
@@ -301,17 +311,17 @@ cv::Mat do_auto_quad(const cv::Mat& img, int binarization_threshold) {
     auto [x1, y1] = detect_non_white_corner_sw(img_b);
     auto [x2, y2] = detect_non_white_corner_se(img_b);
     auto [x3, y3] = detect_non_white_corner_ne(img_b);
-    std::vector<cv::Point2f> src_corners{
-        {static_cast<float>(x0), static_cast<float>(y0)},
-        {static_cast<float>(x1), static_cast<float>(y1)},
-        {static_cast<float>(x2), static_cast<float>(y2)},
-        {static_cast<float>(x3), static_cast<float>(y3)},
+    std::array<cv::Point2f, 4> src_corners{
+        cv::Point2f{static_cast<float>(x0), static_cast<float>(y0)},
+        cv::Point2f{static_cast<float>(x1), static_cast<float>(y1)},
+        cv::Point2f{static_cast<float>(x2), static_cast<float>(y2)},
+        cv::Point2f{static_cast<float>(x3), static_cast<float>(y3)},
     };
-    std::vector<cv::Point2f> dst_corners{
-        {0.f, 0.f},
-        {0.f, static_cast<float>(img.rows)},
-        {static_cast<float>(img.cols), static_cast<float>(img.rows)},
-        {static_cast<float>(img.cols), 0.f},
+    std::array<cv::Point2f, 4> dst_corners{
+        cv::Point2f{0.f, 0.f},
+        cv::Point2f{0.f, static_cast<float>(img.rows)},
+        cv::Point2f{static_cast<float>(img.cols), static_cast<float>(img.rows)},
+        cv::Point2f{static_cast<float>(img.cols), 0.f},
     };
     cv::Mat mat = cv::getPerspectiveTransform(src_corners, dst_corners);
     cv::Mat img1;
@@ -381,16 +391,16 @@ cv::Mat do_binarize(const cv::Mat& img, int threshold) {
     return img1;
 }
 
-std::vector<int> parse_pixelization_threshold(const std::string& pixelization_threshold_str) {
-    std::vector<int> pixelization_threshold;
+Transform::PixelizationThreshold parse_pixelization_threshold(const std::string& pixelization_threshold_str) {
+    Transform::PixelizationThreshold pixelization_threshold;
     bool fail = false;
     try {
-        pixelization_threshold = parse_vec<int>(pixelization_threshold_str);
+        pixelization_threshold = parse_array<std::tuple_element<0, Transform::PixelizationThreshold>::type, std::tuple_size<Transform::PixelizationThreshold>::value>(pixelization_threshold_str);
     }
     catch (const std::exception&) {
         fail = true;
     }
-    if (fail || pixelization_threshold.size() != 3 ||
+    if (fail ||
         pixelization_threshold[0] < 0 || pixelization_threshold[0] > 255 ||
         pixelization_threshold[1] < 0 || pixelization_threshold[1] > 255 ||
         pixelization_threshold[2] < 0 || pixelization_threshold[2] > 255) {
@@ -399,11 +409,11 @@ std::vector<int> parse_pixelization_threshold(const std::string& pixelization_th
     return pixelization_threshold;
 }
 
-std::string get_pixelization_threshold_str(const std::vector<int>& pixelization_threshold) {
-    return vec_to_string(pixelization_threshold);
+std::string get_pixelization_threshold_str(const Transform::PixelizationThreshold& pixelization_threshold) {
+    return array_to_string(pixelization_threshold);
 }
 
-cv::Mat do_pixelize(const cv::Mat& img, PixelType pixel_type, std::vector<int> threshold) {
+cv::Mat do_pixelize(const cv::Mat& img, SymbolType symbol_type, Transform::PixelizationThreshold threshold) {
     cv::Mat img_channels[3];
     cv::split(img, img_channels);
     cv::threshold(img_channels[0], img_channels[0], static_cast<double>(threshold[0]), 255, cv::THRESH_BINARY);
@@ -411,7 +421,7 @@ cv::Mat do_pixelize(const cv::Mat& img, PixelType pixel_type, std::vector<int> t
     cv::threshold(img_channels[2], img_channels[2], static_cast<double>(threshold[2]), 255, cv::THRESH_BINARY);
     cv::Mat img1;
     cv::merge(img_channels, 3, img1);
-    if (pixel_type == PixelType::PIXEL4) {
+    if (symbol_type == SymbolType::SYMBOL2) {
         for (int y = 0; y < img1.rows; ++y) {
             for (int x = 0; x < img1.cols; ++x) {
                 auto& c1 = img1.at<cv::Vec3b>(y, x);
@@ -427,7 +437,7 @@ cv::Mat do_pixelize(const cv::Mat& img, PixelType pixel_type, std::vector<int> t
                 }
             }
         }
-    } else if (pixel_type == PixelType::PIXEL2) {
+    } else if (symbol_type == SymbolType::SYMBOL1) {
         for (int y = 0; y < img1.rows; ++y) {
             for (int x = 0; x < img1.cols; ++x) {
                 auto& c1 = img1.at<cv::Vec3b>(y, x);
