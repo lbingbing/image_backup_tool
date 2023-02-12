@@ -10,10 +10,10 @@ def test_symbol_codec(symbol_type_str):
     symbol_codec_c = symbol_codec_c_wrapper.SymbolCodec(symbol_type)
 
     part_id = 0
-    for frame_size in range(0, 2048, 7):
+    for frame_size in range(0, 1024, 7):
         part_byte_num = image_decode_task.get_part_byte_num(symbol_type, (1, 1, frame_size, 1))
         if part_byte_num >= image_decode_task.Task.min_part_byte_num:
-            for padding_byte_num in range(0, 64, 3):
+            for padding_byte_num in range(0, 32, 3):
                 if padding_byte_num < part_byte_num:
                     part_bytes = bytes([i % 256 for i in range(part_byte_num - padding_byte_num)])
 

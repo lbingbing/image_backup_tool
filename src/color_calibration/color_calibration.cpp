@@ -8,8 +8,9 @@
 
 #include "image_codec.h"
 
-void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file, int print_detailed_mismatch_info_level) {
-    auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform, calibration, true);
+void decode(ImageDecoder* image_decoder, const cv::Mat& img, const Transform transform, const Calibration& calibration, bool save_result_image, const std::string& image_file, int print_detailed_mismatch_info_level) {
+    auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, transform, calibration, true);
+    auto dim = image_decoder->GetDim();
     if (save_result_image) {
         auto pos = image_file.rfind(".");
         auto image_file_prefix = image_file.substr(0, pos);
@@ -88,7 +89,7 @@ bool is_mismatch(const Symbols& part_symbols, ImageDecoder* image_decoder, const
 using InputQueue = ThreadSafeQueue<std::tuple<int, int, int>>;
 using ResultQueue = ThreadSafeQueue<std::tuple<bool, int, int, int>>;
 
-void scan1_worker(ResultQueue& q_result, InputQueue& q_in, ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+void scan1_worker(ResultQueue& q_result, InputQueue& q_in, ImageDecoder* image_decoder, const cv::Mat& img, const Transform transform, const Calibration& calibration) {
     Transform transform1 = transform;
     while (true) {
         auto data = q_in.Pop();
@@ -97,8 +98,8 @@ void scan1_worker(ResultQueue& q_result, InputQueue& q_in, ImageDecoder* image_d
         transform1.pixelization_threshold[0] = b;
         transform1.pixelization_threshold[1] = g;
         transform1.pixelization_threshold[2] = r;
-        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
-        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, dim)) {
+        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, transform1, calibration, true);
+        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, image_decoder->GetDim())) {
             q_result.Emplace(true, b, g, r);
         } else {
             q_result.Emplace(false, 0, 0, 0);
@@ -121,7 +122,7 @@ void scan1_result_worker(ResultQueue& q_result, int total) {
     std::cerr << "\n";
 }
 
-void scan1(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration, int scan_bgr_radius) {
+void scan1(ImageDecoder* image_decoder, const cv::Mat& img, const Transform transform, const Calibration& calibration, int scan_bgr_radius) {
     int b0 = std::max(transform.pixelization_threshold[0] - scan_bgr_radius, 0);
     int b1 = std::min(transform.pixelization_threshold[0] + scan_bgr_radius, 255);
     int g0 = std::max(transform.pixelization_threshold[1] - scan_bgr_radius, 0);
@@ -135,7 +136,7 @@ void scan1(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, cons
     ResultQueue q_result(1024);
     std::vector<std::thread> scan_worker_threads;
     for (int i = 0; i < worker_num; ++i) {
-        scan_worker_threads.emplace_back(scan1_worker, std::ref(q_result), std::ref(q_in), image_decoder, img, dim, transform, calibration);
+        scan_worker_threads.emplace_back(scan1_worker, std::ref(q_result), std::ref(q_in), image_decoder, img, transform, calibration);
     }
     std::thread result_worker_thread(scan1_result_worker, std::ref(q_result), total);
     for (int b = b0; b < b1; ++b) {
@@ -155,15 +156,15 @@ void scan1(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, cons
     result_worker_thread.join();
 }
 
-void scan2(ImageDecoder* image_decoder, const cv::Mat& img, const Dim& dim, const Transform transform, const Calibration& calibration) {
+void scan2(ImageDecoder* image_decoder, const cv::Mat& img, const Transform transform, const Calibration& calibration) {
     for (int c = 0; c < 256; ++c) {
         Transform transform1 = transform;
         transform1.pixelization_threshold[0] = c;
         transform1.pixelization_threshold[1] = c;
         transform1.pixelization_threshold[2] = c;
-        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, dim, transform1, calibration, true);
+        auto [dummy_success, part_id, part_bytes, part_symbols, img1, result_imgs] = image_decoder->Decode(img, transform1, calibration, true);
         std::cout << "bgr: " << c << "," << c << "," << c << " ";
-        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, dim)) {
+        if (!part_symbols.empty() && !is_mismatch(part_symbols, image_decoder, image_decoder->GetDim())) {
             std::cout << "pass";
         } else {
             std::cout << "fail";
@@ -227,8 +228,8 @@ int main(int argc, char** argv) {
             }
         }
 
-        ImageDecoder image_decoder(parse_symbol_type(vm["symbol_type"].as<std::string>()));
         auto dim = parse_dim(vm["dim"].as<std::string>());
+        ImageDecoder image_decoder(parse_symbol_type(vm["symbol_type"].as<std::string>()), dim);
         Transform transform = get_transform(vm);
         Calibration calibration;
         if (vm.count("calibration_file")) {
@@ -237,11 +238,11 @@ int main(int argc, char** argv) {
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);
         if (scan_mode == 0) {
-            decode(&image_decoder, img, dim, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
+            decode(&image_decoder, img, transform, calibration, save_result_image, image_file, print_detailed_mismatch_info_level);
         } else if (scan_mode == 1) {
-            scan1(&image_decoder, img, dim, transform, calibration, scan_bgr_radius);
+            scan1(&image_decoder, img, transform, calibration, scan_bgr_radius);
         } else if (scan_mode == 2) {
-            scan2(&image_decoder, img, dim, transform, calibration);
+            scan2(&image_decoder, img, transform, calibration);
         }
     }
     catch (std::exception& e) {

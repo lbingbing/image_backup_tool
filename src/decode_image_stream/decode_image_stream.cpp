@@ -11,7 +11,7 @@
 
 class App {
 public:
-    App(const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp, const Transform& transform) : m_output_file(output_file), m_image_decode_worker(symbol_type), m_dim(dim), m_part_num(part_num), m_mp(mp), m_transform(transform) {
+    App(const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp, const Transform& transform) : m_output_file(output_file), m_image_decode_worker(symbol_type, dim), m_part_num(part_num), m_mp(mp), m_transform(transform) {
     }
 
     bool IsRunning() { return m_running; }
@@ -24,7 +24,7 @@ public:
         };
         m_fetch_image_thread = std::make_unique<std::thread>(&ImageDecodeWorker::FetchImageWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_frame_q), 25);
         for (int i = 0; i < m_mp; ++i) {
-            m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), m_dim, get_transform_fn, m_calibration);
+            m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration);
         }
         auto save_part_progress_cb = [](const ImageDecodeWorker::SavePartProgress& save_part_progress){
             std::cout << save_part_progress.frame_num << " frames processed, " << save_part_progress.done_part_num << "/" << save_part_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << save_part_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << save_part_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << save_part_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << save_part_progress.left_days << "d" << std::setw(2) << save_part_progress.left_hours << "h" << std::setw(2) << save_part_progress.left_minutes << "m" << std::setw(2) << save_part_progress.left_seconds << "s" << std::setfill(' ') << "\n";
@@ -36,7 +36,7 @@ public:
             std::cout << "error\n";
             std::cout << msg << "\n";
         };
-        m_save_part_thread = std::make_unique<std::thread>(&ImageDecodeWorker::SavePartWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_part_q), m_output_file, m_dim, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, nullptr, nullptr, nullptr, nullptr);
+        m_save_part_thread = std::make_unique<std::thread>(&ImageDecodeWorker::SavePartWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_part_q), m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, nullptr, nullptr, nullptr, nullptr);
     }
 
     void Stop() {
@@ -58,7 +58,6 @@ public:
 private:
     std::string m_output_file;
     ImageDecodeWorker m_image_decode_worker;
-    Dim m_dim;
     uint32_t m_part_num = 0;
     int m_mp = 0;
     Transform m_transform;

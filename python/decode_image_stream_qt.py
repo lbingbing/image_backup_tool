@@ -31,9 +31,8 @@ class Widget(QtWidgets.QWidget):
         super().__init__()
 
         self.output_file = output_file
-        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(symbol_type)
-        self.dim = dim
-        self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size = self.dim
+        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(symbol_type, dim)
+        self.tile_x_num, self.tile_y_num, self.tile_x_size, self.tile_y_size = dim
         self.part_num = part_num
         self.mp = mp
 
@@ -307,7 +306,7 @@ class Widget(QtWidgets.QWidget):
         calibrate_cb = lambda *args: self.send_calibration.emit(*args)
         send_calibration_image_result_cb = lambda *args: self.send_calibration_image_result.emit(*args)
         calibration_progress_cb = lambda *args: self.send_calibration_progress.emit(*args)
-        self.calibrate_thread = threading.Thread(target=self.image_decode_worker.calibrate_worker, args=(self.frame_q, self.dim, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb))
+        self.calibrate_thread = threading.Thread(target=self.image_decode_worker.calibrate_worker, args=(self.frame_q, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb))
         self.calibrate_thread.start()
 
     def stop_calibration(self):
@@ -361,16 +360,16 @@ class Widget(QtWidgets.QWidget):
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.task_running, self.running_lock, self.frame_q, 25))
         self.fetch_image_thread.start()
         for i in range(self.mp):
-            t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration))
+            t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration))
             t.start()
             self.decode_image_threads.append(t)
 
         send_decode_image_result_cb = lambda *args: self.send_decode_image_result.emit(*args)
-        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration, send_decode_image_result_cb, 300))
+        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_decode_image_result_cb, 300))
         self.decode_image_result_thread.start()
 
         send_auto_transform_cb = lambda *args: self.send_auto_transform.emit(*args)
-        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration, send_auto_transform_cb, 300))
+        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_auto_transform_cb, 300))
         self.auto_transform_thread.start()
 
         save_part_progress_cb = lambda *args: self.send_save_part_progress.emit(*args)
@@ -378,7 +377,7 @@ class Widget(QtWidgets.QWidget):
         save_part_error_cb = lambda *args: self.send_save_part_error.emit(*args)
         finalization_start_cb = lambda *args: self.send_finalization_start.emit(*args)
         finalization_progress_cb = lambda *args: self.send_finalization_progress.emit(*args)
-        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.dim, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
         self.save_part_thread.start()
 
     def stop_task(self):

@@ -6,7 +6,7 @@
 #include "image_decode_worker.h"
 #include "image_stream.h"
 
-ImageDecodeWorker::ImageDecodeWorker(SymbolType symbol_type) : m_image_decoder(symbol_type) {
+ImageDecodeWorker::ImageDecodeWorker(SymbolType symbol_type, const Dim& dim) : m_image_decoder(symbol_type, dim) {
 }
 
 void ImageDecodeWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, int interval) {
@@ -23,7 +23,7 @@ void ImageDecodeWorker::FetchImageWorker(std::atomic<bool>& running, ThreadSafeQ
     }
 }
 
-void ImageDecodeWorker::CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, CalibrateCb calibrate_cb, SendCalibrationImageResultCb send_calibration_image_result_cb, CalibrationProgressCb calibration_progress_cb) {
+void ImageDecodeWorker::CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, CalibrateCb calibrate_cb, SendCalibrationImageResultCb send_calibration_image_result_cb, CalibrationProgressCb calibration_progress_cb) {
     auto t0 = std::chrono::high_resolution_clock::now();
     uint64_t frame_num = 0;
     float fps = 0;
@@ -32,7 +32,7 @@ void ImageDecodeWorker::CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, cv::
         auto data = frame_q.Pop();
         if (!data) break;
         auto& [frame_id, frame] = data.value();
-        auto [frame1, calibration, result_imgs] = m_image_decoder.Calibrate(frame, dim, get_transform_cb(), true);
+        auto [frame1, calibration, result_imgs] = m_image_decoder.Calibrate(frame, get_transform_cb(), true);
         ++frame_num;
         if ((frame_num & 0x1f) == 0) {
             auto t1 = std::chrono::high_resolution_clock::now();
@@ -49,17 +49,23 @@ void ImageDecodeWorker::CalibrateWorker(ThreadSafeQueue<std::pair<uint64_t, cv::
     }
 }
 
-void ImageDecodeWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration) {
+void ImageDecodeWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration) {
+    uint64_t frame_num = 0;
+    Transform transform = get_transform_cb();
     while (true) {
         auto data = frame_q.Pop();
         if (!data) break;
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, false);
+        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, transform, calibration, false);
         part_q.Emplace(success, part_id, part_bytes);
+        ++frame_num;
+        if ((frame_num & 0x1f) == 0) {
+            transform = get_transform_cb();
+        }
     }
 }
 
-void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration, SendDecodeImageResultCb send_decode_image_result_cb, int interval) {
+void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendDecodeImageResultCb send_decode_image_result_cb, int interval) {
     while (true) {
         auto data = frame_q.Front();
         if (!data) {
@@ -67,14 +73,14 @@ void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q
             break;
         }
         auto& [frame_id, frame] = data.value();
-        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, get_transform_cb(), calibration, true);
+        auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, get_transform_cb(), calibration, true);
         part_q.Emplace(success, part_id, part_bytes);
         send_decode_image_result_cb(frame1, success, result_imgs);
         std::this_thread::sleep_for(std::chrono::milliseconds(interval));
     }
 }
 
-void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, const Dim& dim, GetTransformCb get_transform_cb, const Calibration& calibration, SendAutoTransformCb send_auto_trasform_cb, int interval) {
+void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendAutoTransformCb send_auto_trasform_cb, int interval) {
     constexpr int THRESHOLD_NUM = 256;
     constexpr int LOOP_NUM = 4;
     uint64_t frame_num = 0;
@@ -93,7 +99,7 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
             transform.pixelization_threshold[0] = cur_pixelization_threshold;
             transform.pixelization_threshold[1] = cur_pixelization_threshold;
             transform.pixelization_threshold[2] = cur_pixelization_threshold;
-            auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, dim, transform, calibration, false);
+            auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, transform, calibration, false);
             if (!has_succeeded && (success || i == LOOP_NUM - 1)) {
                 part_q.Emplace(success, part_id, part_bytes);
                 has_succeeded = true;
@@ -121,8 +127,9 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
     }
 }
 
-void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, const Dim& dim, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
-    SymbolType symbol_type = m_image_decoder.GetSymbolCodec().GetSymbolType();
+void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
+    auto symbol_type = m_image_decoder.GetSymbolCodec().GetSymbolType();
+    auto dim = m_image_decoder.GetDim();
     Task task(output_file);
     if (std::filesystem::is_regular_file(task.TaskPath())) {
         task.Load();
@@ -177,7 +184,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
         auto& [success, part_id, part_bytes] = data.value();
         if (success) task.UpdatePart(part_id, part_bytes);
         ++frame_num;
-        if ((frame_num & 0x7f) == 0) {
+        if ((frame_num & 0x3f) == 0) {
             auto t1 = std::chrono::high_resolution_clock::now();
             auto delta_t = std::max(std::chrono::duration_cast<std::chrono::duration<float>>(t1 - t0).count(), 0.001f);
             t0 = t1;
@@ -205,7 +212,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
                 left_seconds = 0;
             }
         }
-        if ((frame_num & 0xf) == 0) {
+        if ((frame_num & 0x1f) == 0) {
             if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
         }
         if (task_status_server && (task_status_server->NeedUpdateTaskStatus() || (task_status_server->IsRunning() && (frame_num & 0xff) == 0))) {

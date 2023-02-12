@@ -15,6 +15,6 @@ rmtree('__pycache__')
 rmtree('python/__pycache__')
 rmtree('.pytest_cache')
 rmtree('build')
-rmtree('bin/__pycache__')
+rmtree('image_backup_tool_release/__pycache__')
 if not args.release:
-    rmtree('bin')
+    rmtree('image_backup_tool_release')

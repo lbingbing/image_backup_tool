@@ -24,8 +24,8 @@ class SavePartProgress:
         self.left_seconds = 0
 
 class ImageDecodeWorker:
-    def __init__(self, symbol_type):
-        self.image_decoder = image_decoder.ImageDecoder(symbol_type)
+    def __init__(self, symbol_type, dim):
+        self.image_decoder = image_decoder.ImageDecoder(symbol_type, dim)
 
     def fetch_image_worker(self, running, running_lock, frame_q, interval):
         frame_id = 0
@@ -46,7 +46,7 @@ class ImageDecodeWorker:
                 time.sleep(interval / 1000)
             stream.close()
 
-    def calibrate_worker(self, frame_q, dim, get_transform_cb, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb):
+    def calibrate_worker(self, frame_q, get_transform_cb, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb):
         t0 = time.time()
         frame_num = 0
         fps = 0
@@ -57,7 +57,7 @@ class ImageDecodeWorker:
             if data is None:
                 break
             frame_id, frame = data
-            frame1, calibration, result_imgs = self.image_decoder.calibrate(frame, dim, get_transform_cb(), True)
+            frame1, calibration, result_imgs = self.image_decoder.calibrate(frame, get_transform_cb(), True)
             frame_num += 1
             if frame_num & 0x1f == 0:
                 t1 = time.time()
@@ -74,29 +74,34 @@ class ImageDecodeWorker:
             calibration_progress.fps = fps
             calibration_progress_cb(calibration_progress)
 
-    def decode_image_worker(self, part_q, frame_q, dim, get_transform_cb, calibration):
+    def decode_image_worker(self, part_q, frame_q, get_transform_cb, calibration):
+        frame_num = 0
+        transform = get_transform_cb()
         while True:
             data = frame_q.get()
             frame_q.task_done()
             if data is None:
                 break
             frame_id, frame = data
-            success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, dim, get_transform_cb(), calibration, False)
+            success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, transform, calibration, False)
             part_q.put((success, part_id, part_bytes))
+            frame_num += 1
+            if frame_num & 0x7 == 0:
+                transform = get_transform_cb()
 
-    def decode_result_worker(self, part_q, frame_q, dim, get_transform_cb, calibration, send_decode_image_result_cb, interval):
+    def decode_result_worker(self, part_q, frame_q, get_transform_cb, calibration, send_decode_image_result_cb, interval):
         while True:
             data = frame_q.get()
             frame_q.task_done()
             if data is None:
                 break
             frame_id, frame = data
-            success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, dim, get_transform_cb(), calibration, True)
+            success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, get_transform_cb(), calibration, True)
             part_q.put((success, part_id, part_bytes))
             send_decode_image_result_cb(frame1, success, result_imgs)
             time.sleep(interval / 1000)
 
-    def auto_transform_worker(self, part_q, frame_q, dim, get_transform_cb, calibration, send_auto_trasform_cb, interval):
+    def auto_transform_worker(self, part_q, frame_q, get_transform_cb, calibration, send_auto_trasform_cb, interval):
         THRESHOLD_NUM = 256
         LOOP_NUM = 4
         frame_num = 0
@@ -112,7 +117,7 @@ class ImageDecodeWorker:
             has_succeeded = False
             for i in range(LOOP_NUM):
                 transform.pixelization_threshold = (cur_pixelization_threshold, ) * 3
-                success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, dim, transform, calibration, False)
+                success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, transform, calibration, False)
                 if not has_succeeded and (success or i == LOOP_NUM - 1):
                     part_q.put((success, part_id, part_bytes))
                     has_succeeded = True
@@ -131,8 +136,9 @@ class ImageDecodeWorker:
                     send_auto_trasform_cb(transform)
             time.sleep(interval / 1000)
 
-    def save_part_worker(self, running, running_lock, part_q, output_file, dim, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server):
+    def save_part_worker(self, running, running_lock, part_q, output_file, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server):
         symbol_type = self.image_decoder.symbol_codec.symbol_type
+        dim = self.image_decoder.dim
         task = image_decode_task.Task(output_file)
         if os.path.isfile(task.task_path):
             task.load()
@@ -217,7 +223,7 @@ class ImageDecodeWorker:
                     left_hours = 0
                     left_minutes = 0
                     left_seconds = 0
-            if frame_num & 0x3 == 0:
+            if frame_num & 0x7 == 0:
                 if save_part_progress_cb:
                     save_part_progress = SavePartProgress()
                     save_part_progress.frame_num = frame_num

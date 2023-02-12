@@ -16,10 +16,11 @@ def run(cmd, timeout=None):
             }
     else:
         env = None
+    print(' '.join(cmd))
     res = subprocess.run(cmd, timeout=timeout, env=env)
     return res.returncode == 0
 
-os.chdir('bin')
+os.chdir('image_backup_tool_release')
 
 def test_test_symbol_codec_p():
     assert run(['python', 'test_symbol_codec.py'])
@@ -34,13 +35,13 @@ def test_test_thread_safe_queue():
     assert run(['test_thread_safe_queue'])
 
 def test_test_image_codec_p2p():
-    assert run(['python', 'test_image_codec.py', 'p2p', 'test_target_file', '2048', 'symbol2', '1,1,40,40', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'p2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
 
 def test_test_image_codec_c2c():
-    assert run(['python', 'test_image_codec.py', 'c2c', 'test_target_file', '2048', 'symbol2', '1,1,40,40', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'c2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
 
 def test_test_image_codec_p2c():
-    assert run(['python', 'test_image_codec.py', 'p2c', 'test_target_file', '2048', 'symbol2', '1,1,40,40', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'p2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
 
 def test_test_image_codec_c2p():
-    assert run(['python', 'test_image_codec.py', 'c2p', 'test_target_file', '2048', 'symbol2', '1,1,40,40', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'c2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)

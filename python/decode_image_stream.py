@@ -7,13 +7,11 @@ import symbol_codec
 import transform_utils
 import image_decoder
 import image_decode_worker
-import image_decode_task
 
 class App:
     def __init__(self, output_file, symbol_type, dim, part_num, mp, transform):
         self.output_file = output_file
-        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(symbol_type)
-        self.dim = dim
+        self.image_decode_worker = image_decode_worker.ImageDecodeWorker(symbol_type, dim)
         self.part_num = part_num
         self.transform = transform
         self.mp = mp
@@ -44,7 +42,7 @@ class App:
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.running, self.running_lock, self.frame_q, 25))
         self.fetch_image_thread.start()
         for i in range(self.mp):
-            t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, self.dim, get_transform_fn, self.calibration))
+            t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration))
             t.start()
             self.decode_image_threads.append(t)
 
@@ -59,7 +57,7 @@ class App:
             print('error')
             print(msg)
 
-        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.running, self.running_lock, self.part_q, self.output_file, self.dim, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, None, None, None, None))
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, None, None, None, None))
         self.save_part_thread.start()
 
     def stop(self):

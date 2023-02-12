@@ -13,4 +13,4 @@ set_target_properties(decode_image_stream_qt PROPERTIES
     MACOSX_BUNDLE ON
 )
 
-install(TARGETS decode_image_stream_qt DESTINATION bin)
+install(TARGETS decode_image_stream_qt DESTINATION ${release_dir})

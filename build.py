@@ -16,7 +16,7 @@ def run(cmd):
 cmds = [
     'cmake -B build',
     'cmake --build build --config release -j 4',
-    'cmake --install build --prefix .',
+    'cmake --install build --prefix image_backup_tool_release',
     'pytest test.py -v',
     ]
 

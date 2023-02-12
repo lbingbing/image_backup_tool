@@ -52,13 +52,15 @@ elseif(APPLE)
     set(compile_flags "")
 endif()
 
+set(release_dir .)
+
 function(add_exe dir name)
     add_executable(${name} ${dir}/${name}.cpp)
     target_compile_definitions(${name} PRIVATE ${compile_flags})
     target_include_directories(${name} PRIVATE ${internal_include_dirs} ${external_include_dirs})
     target_link_libraries(${name} PRIVATE image_codec ${external_libs})
 
-    install(TARGETS ${name} DESTINATION bin)
+    install(TARGETS ${name} DESTINATION ${release_dir})
 endfunction()
 
 add_subdirectory(python)
@@ -79,6 +81,6 @@ add_subdirectory(src/test_thread_safe_queue)
 add_subdirectory(src/test_transform_utils)
 
 if(WIN32)
-    install(FILES ${external_binaries} DESTINATION bin)
-    install(DIRECTORY ${qt_dir}/plugins/platforms DESTINATION bin)
+    install(FILES ${external_binaries} DESTINATION ${release_dir})
+    install(DIRECTORY ${qt_dir}/plugins/platforms DESTINATION ${release_dir})
 endif()

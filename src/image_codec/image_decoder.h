@@ -23,11 +23,13 @@ using ImageDecodeResult = std::tuple<bool, uint32_t, Bytes, Symbols, cv::Mat, st
 
 class ImageDecoder {
 public:
-    IMAGE_CODEC_API ImageDecoder(SymbolType symbol_type);
+    IMAGE_CODEC_API ImageDecoder(SymbolType symbol_type, const Dim& dim);
     IMAGE_CODEC_API SymbolCodec& GetSymbolCodec() { return *m_symbol_codec; }
-    IMAGE_CODEC_API CalibrateResult Calibrate(const cv::Mat& img, const Dim& dim, const Transform& transform, bool result_image = false);
-    IMAGE_CODEC_API ImageDecodeResult Decode(const cv::Mat& img, const Dim& dim, const Transform& transform, const Calibration& calibration, bool result_image = false);
+    IMAGE_CODEC_API const Dim& GetDim() { return m_dim; }
+    IMAGE_CODEC_API CalibrateResult Calibrate(const cv::Mat& img, const Transform& transform, bool result_image = false);
+    IMAGE_CODEC_API ImageDecodeResult Decode(const cv::Mat& img, const Transform& transform, const Calibration& calibration, bool result_image = false);
 
 private:
     std::unique_ptr<SymbolCodec> m_symbol_codec;
+    Dim m_dim;
 };

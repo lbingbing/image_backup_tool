@@ -360,11 +360,11 @@ cv::Mat get_result_image(const cv::Mat& img, const Dim& dim, const Calibration& 
     return img1;
 }
 
-ImageDecoder::ImageDecoder(SymbolType symbol_type) : m_symbol_codec(create_symbol_codec(symbol_type)) {
+ImageDecoder::ImageDecoder(SymbolType symbol_type, const Dim& dim) : m_symbol_codec(create_symbol_codec(symbol_type)), m_dim(dim) {
 }
 
-CalibrateResult ImageDecoder::Calibrate(const cv::Mat& img, const Dim& dim, const Transform& transform, bool result_image) {
-    auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;
+CalibrateResult ImageDecoder::Calibrate(const cv::Mat& img, const Transform& transform, bool result_image) {
+    auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = m_dim;
     cv::Mat img1 = transform_image(img, transform);
     cv::Mat img1_b = do_binarize(img1, transform.binarization_threshold);
     Calibration calibration;
@@ -393,7 +393,7 @@ CalibrateResult ImageDecoder::Calibrate(const cv::Mat& img, const Dim& dim, cons
         start_x = 0;
     }
     calibration.valid = true;
-    calibration.dim = dim;
+    calibration.dim = m_dim;
     calibration.tiles.resize(tile_y_num);
     cv::Mat result_img = img1.clone();
     const int radius = 2;
@@ -419,8 +419,8 @@ CalibrateResult ImageDecoder::Calibrate(const cv::Mat& img, const Dim& dim, cons
     return std::make_tuple(std::move(img1), std::move(calibration), std::move(result_imgs));
 }
 
-ImageDecodeResult ImageDecoder::Decode(const cv::Mat& img, const Dim& dim, const Transform& transform, const Calibration& calibration, bool result_image) {
-    auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = dim;
+ImageDecodeResult ImageDecoder::Decode(const cv::Mat& img, const Transform& transform, const Calibration& calibration, bool result_image) {
+    auto [tile_x_num, tile_y_num, tile_x_size, tile_y_size] = m_dim;
     cv::Mat img1 = transform_image(img, transform);
     Symbols symbols;
     std::vector<std::vector<cv::Mat>> result_imgs(tile_y_num);
@@ -434,7 +434,7 @@ ImageDecodeResult ImageDecoder::Decode(const cv::Mat& img, const Dim& dim, const
             }
         }
         if (result_image) {
-            result_imgs[0][0] = get_result_image(img1, dim, calibration, symbols);
+            result_imgs[0][0] = get_result_image(img1, m_dim, calibration, symbols);
         }
     } else {
         img1 = do_auto_quad(img1, transform.binarization_threshold);

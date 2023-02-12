@@ -23,4 +23,4 @@ set(file_to_install
     transform_utils.py
 )
 
-install(FILES ${file_to_install} DESTINATION bin)
+install(FILES ${file_to_install} DESTINATION ${release_dir})

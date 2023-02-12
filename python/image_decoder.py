@@ -312,11 +312,12 @@ def get_result_image_by_calibration(img, dim, calibration, symbols):
     return img1
 
 class ImageDecoder:
-    def __init__(self, symbol_type):
+    def __init__(self, symbol_type, dim):
         self.symbol_codec = symbol_codec.create_symbol_codec(symbol_type)
+        self.dim = dim
 
-    def calibrate(self, img, dim, transform, result_image):
-        tile_x_num, tile_y_num, tile_x_size, tile_y_size = dim
+    def calibrate(self, img, transform, result_image):
+        tile_x_num, tile_y_num, tile_x_size, tile_y_size = self.dim
         img1 = transform_utils.transform_image(img, transform)
         img1_b = transform_utils.do_binarize(img1, transform.binarization_threshold)
         calibration = Calibration()
@@ -340,7 +341,7 @@ class ImageDecoder:
                 start_y[x] += y1
             start_x = 0
         calibration.valid = True
-        calibration.dim = dim
+        calibration.dim = self.dim
         calibration.tiles = [[TileCalibration() for j in range(tile_x_num)] for i in range(tile_y_num)]
         result_img = np.copy(img1)
         RADIUS = 2
@@ -357,8 +358,8 @@ class ImageDecoder:
             result_imgs[0][0] = result_img
         return img1, calibration, result_imgs
 
-    def decode(self, img, dim, transform, calibration, result_image):
-        tile_x_num, tile_y_num, tile_x_size, tile_y_size = dim
+    def decode(self, img, transform, calibration, result_image):
+        tile_x_num, tile_y_num, tile_x_size, tile_y_size = self.dim
         img1 = transform_utils.transform_image(img, transform)
         symbols = []
         result_imgs = [[None for j in range(tile_x_num)] for i in range(tile_y_num)]
@@ -369,7 +370,7 @@ class ImageDecoder:
                     tile_symbols = get_tile_symbols_by_calibration(img1_p, calibration.tiles[tile_y_id][tile_x_id].centers)
                     symbols += tile_symbols
             if result_image:
-                result_imgs[0][0] = get_result_image_by_calibration(img1, dim, calibration, symbols)
+                result_imgs[0][0] = get_result_image_by_calibration(img1, self.dim, calibration, symbols)
         else:
             img1 = transform_utils.do_auto_quad(img1, transform.binarization_threshold)
             img1_b = transform_utils.do_binarize(img1, transform.binarization_threshold)

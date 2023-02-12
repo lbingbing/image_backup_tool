@@ -15,5 +15,5 @@ target_compile_definitions(image_codec PRIVATE IMAGE_CODEC_EXPORTS ${compile_fla
 target_include_directories(image_codec PRIVATE ${external_include_dirs})
 target_link_libraries(image_codec PRIVATE ${external_libs})
 
-install(TARGETS image_codec DESTINATION bin)
-install(FILES image_stream.ini DESTINATION bin)
+install(TARGETS image_codec DESTINATION ${release_dir})
+install(FILES image_stream.ini DESTINATION ${release_dir})

@@ -67,7 +67,7 @@ void SavePartThread::run() {
     m_worker_fn(save_part_progress_cb, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb);
 }
 
-Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp) : QWidget(parent), m_output_file(output_file), m_image_decode_worker(symbol_type), m_dim(dim), m_part_num(part_num), m_mp(mp) {
+Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbol_type, const Dim& dim, uint32_t part_num, int mp) : QWidget(parent), m_output_file(output_file), m_image_decode_worker(symbol_type, dim), m_dim(dim), m_part_num(part_num), m_mp(mp) {
     m_result_images.resize(m_dim.tile_y_num);
     for (int tile_y_id = 0; tile_y_id < m_dim.tile_y_num; ++tile_y_id) {
         m_result_images[tile_y_id].resize(m_dim.tile_x_num);
@@ -305,7 +305,7 @@ void Widget::StartCalibration() {
     };
     m_fetch_image_thread = std::make_unique<std::thread>(&ImageDecodeWorker::FetchImageWorker, &m_image_decode_worker, std::ref(m_calibration_running), std::ref(m_frame_q), 200);
     auto calibrate_worker_fn = [this, get_transform_fn](ImageDecodeWorker::CalibrateCb calibrate_cb, ImageDecodeWorker::SendCalibrationImageResultCb send_calibration_image_result_cb, ImageDecodeWorker::CalibrationProgressCb calibration_progress_cb) {
-        m_image_decode_worker.CalibrateWorker(m_frame_q, m_dim, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb);
+        m_image_decode_worker.CalibrateWorker(m_frame_q, get_transform_fn, calibrate_cb, send_calibration_image_result_cb, calibration_progress_cb);
     };
     m_calibrate_thread = std::make_unique<CalibrateThread>(this, calibrate_worker_fn);
     connect(m_calibrate_thread.get(), &CalibrateThread::SendCalibration, this, &Widget::ReceiveCalibration);
@@ -368,22 +368,22 @@ void Widget::StartTask() {
     };
     m_fetch_image_thread = std::make_unique<std::thread>(&ImageDecodeWorker::FetchImageWorker, &m_image_decode_worker, std::ref(m_task_running), std::ref(m_frame_q), 25);
     for (int i = 0; i < m_mp; ++i) {
-        m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), m_dim, get_transform_fn, m_calibration);
+        m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration);
     }
     auto decode_image_result_worker_fn = [this, get_transform_fn](ImageDecodeWorker::SendDecodeImageResultCb send_decode_image_result_cb) {
-        m_image_decode_worker.DecodeResultWorker(m_part_q, m_frame_q, m_dim, get_transform_fn, m_calibration, send_decode_image_result_cb, 300);
+        m_image_decode_worker.DecodeResultWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_decode_image_result_cb, 300);
     };
     m_decode_image_result_thread = std::make_unique<DecodeImageResultThread>(this, decode_image_result_worker_fn);
     connect(m_decode_image_result_thread.get(), &DecodeImageResultThread::SendDecodeImageResult, this, &Widget::ShowResult);
     m_decode_image_result_thread->start();
     auto auto_transform_worker_fn = [this, get_transform_fn](ImageDecodeWorker::SendAutoTransformCb send_auto_transform_cb) {
-        m_image_decode_worker.AutoTransformWorker(m_part_q, m_frame_q, m_dim, get_transform_fn, m_calibration, send_auto_transform_cb, 300);
+        m_image_decode_worker.AutoTransformWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_auto_transform_cb, 300);
     };
     m_auto_transform_thread = std::make_unique<AutoTransformThread>(this, auto_transform_worker_fn);
     connect(m_auto_transform_thread.get(), &AutoTransformThread::SendAutoTransform, this, &Widget::UpdateAutoTransform);
     m_auto_transform_thread->start();
     auto save_part_worker_fn = [this](ImageDecodeWorker::SavePartProgressCb save_part_progress_cb, ImageDecodeWorker::SavePartCompleteCb save_part_complete_cb, ImageDecodeWorker::SavePartErrorCb save_part_error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb) {
-        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_dim, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
+        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
     };
     m_save_part_thread = std::make_unique<SavePartThread>(this, save_part_worker_fn);
     connect(m_save_part_thread.get(), &SavePartThread::SendSavePartProgress, this, &Widget::ShowTaskSavePartProgress);
