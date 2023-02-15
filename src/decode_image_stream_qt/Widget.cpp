@@ -371,13 +371,13 @@ void Widget::StartTask() {
         m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration);
     }
     auto decode_image_result_worker_fn = [this, get_transform_fn](ImageDecodeWorker::SendDecodeImageResultCb send_decode_image_result_cb) {
-        m_image_decode_worker.DecodeResultWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_decode_image_result_cb, 300);
+        m_image_decode_worker.DecodeResultWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_decode_image_result_cb);
     };
     m_decode_image_result_thread = std::make_unique<DecodeImageResultThread>(this, decode_image_result_worker_fn);
     connect(m_decode_image_result_thread.get(), &DecodeImageResultThread::SendDecodeImageResult, this, &Widget::ShowResult);
     m_decode_image_result_thread->start();
     auto auto_transform_worker_fn = [this, get_transform_fn](ImageDecodeWorker::SendAutoTransformCb send_auto_transform_cb) {
-        m_image_decode_worker.AutoTransformWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_auto_transform_cb, 300);
+        m_image_decode_worker.AutoTransformWorker(m_part_q, m_frame_q, get_transform_fn, m_calibration, send_auto_transform_cb);
     };
     m_auto_transform_thread = std::make_unique<AutoTransformThread>(this, auto_transform_worker_fn);
     connect(m_auto_transform_thread.get(), &AutoTransformThread::SendAutoTransform, this, &Widget::UpdateAutoTransform);
@@ -426,13 +426,19 @@ void Widget::StopTask() {
 }
 
 void Widget::ToggleCalibrationStartStop() {
-    if (m_calibration_running) StopCalibration();
-    else                       StartCalibration();
+    if (m_calibration_running) {
+        StopCalibration();
+    } else {
+        StartCalibration();
+    }
 }
 
 void Widget::ToggleTaskStartStop() {
-    if (m_task_running) StopTask();
-    else                StartTask();
+    if (m_task_running) {
+        StopTask();
+    } else {
+        StartTask();
+    }
 }
 
 void Widget::ClearStatus() {

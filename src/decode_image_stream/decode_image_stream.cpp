@@ -18,14 +18,29 @@ public:
 
     void Start() {
         m_running = true;
+
         auto get_transform_fn = [this] {
             std::lock_guard<std::mutex> lock(m_transform_mtx);
             return m_transform;
         };
+
         m_fetch_image_thread = std::make_unique<std::thread>(&ImageDecodeWorker::FetchImageWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_frame_q), 25);
+
         for (int i = 0; i < m_mp; ++i) {
             m_decode_image_threads.emplace_back(&ImageDecodeWorker::DecodeImageWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration);
         }
+
+        auto send_decode_image_result_cb = [](cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs) {
+        };
+
+        m_decode_image_result_thread = std::make_unique<std::thread>(&ImageDecodeWorker::DecodeResultWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration, send_decode_image_result_cb);
+
+        auto send_auto_trasform_cb = [this](const Transform& transform) {
+            std::lock_guard<std::mutex> lock(m_transform_mtx);
+            m_transform = transform;
+        };
+        m_auto_transform_thread = std::make_unique<std::thread>(&ImageDecodeWorker::AutoTransformWorker, &m_image_decode_worker, std::ref(m_part_q), std::ref(m_frame_q), get_transform_fn, m_calibration, send_auto_trasform_cb);
+
         auto save_part_progress_cb = [](const ImageDecodeWorker::SavePartProgress& save_part_progress){
             std::cout << save_part_progress.frame_num << " frames processed, " << save_part_progress.done_part_num << "/" << save_part_progress.part_num << " parts transferred, fps=" << std::fixed << std::setprecision(2) << save_part_progress.fps << ", done_fps=" << std::fixed << std::setprecision(2) << save_part_progress.done_fps << ", bps=" << std::fixed << std::setprecision(0) << save_part_progress.bps << ", left_time=" << std::setfill('0') << std::setw(2) << save_part_progress.left_days << "d" << std::setw(2) << save_part_progress.left_hours << "h" << std::setw(2) << save_part_progress.left_minutes << "m" << std::setw(2) << save_part_progress.left_seconds << "s" << std::setfill(' ') << "\n";
         };
@@ -43,13 +58,17 @@ public:
         m_running = false;
         m_fetch_image_thread->join();
         m_fetch_image_thread.reset();
-        for (size_t i = 0; i < m_mp; ++i) {
+        for (size_t i = 0; i < m_mp + 2; ++i) {
             m_frame_q.PushNull();
         }
         for (auto& t : m_decode_image_threads) {
             t.join();
         }
         m_decode_image_threads.clear();
+        m_decode_image_result_thread->join();
+        m_decode_image_result_thread.reset();
+        m_auto_transform_thread->join();
+        m_auto_transform_thread.reset();
         m_part_q.PushNull();
         m_save_part_thread->join();
         m_save_part_thread.reset();
@@ -66,6 +85,8 @@ private:
     ThreadSafeQueue<DecodeResult> m_part_q{128};
     std::unique_ptr<std::thread> m_fetch_image_thread;
     std::vector<std::thread> m_decode_image_threads;
+    std::unique_ptr<std::thread> m_decode_image_result_thread;
+    std::unique_ptr<std::thread> m_auto_transform_thread;
     std::unique_ptr<std::thread> m_save_part_thread;
     std::mutex m_transform_mtx;
     std::atomic<bool> m_running = false;

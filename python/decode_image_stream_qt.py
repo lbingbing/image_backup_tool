@@ -365,11 +365,11 @@ class Widget(QtWidgets.QWidget):
             self.decode_image_threads.append(t)
 
         send_decode_image_result_cb = lambda *args: self.send_decode_image_result.emit(*args)
-        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_decode_image_result_cb, 300))
+        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_decode_image_result_cb))
         self.decode_image_result_thread.start()
 
         send_auto_transform_cb = lambda *args: self.send_auto_transform.emit(*args)
-        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_auto_transform_cb, 300))
+        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_auto_transform_cb))
         self.auto_transform_thread.start()
 
         save_part_progress_cb = lambda *args: self.send_save_part_progress.emit(*args)

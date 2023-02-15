@@ -1,7 +1,9 @@
 #include <sstream>
+#include <map>
 #include <chrono>
 #include <filesystem>
 #include <cmath>
+#include <algorithm>
 
 #include "image_decode_worker.h"
 #include "image_stream.h"
@@ -65,7 +67,7 @@ void ImageDecodeWorker::DecodeImageWorker(ThreadSafeQueue<DecodeResult>& part_q,
     }
 }
 
-void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendDecodeImageResultCb send_decode_image_result_cb, int interval) {
+void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendDecodeImageResultCb send_decode_image_result_cb) {
     while (true) {
         auto data = frame_q.Front();
         if (!data) {
@@ -76,16 +78,37 @@ void ImageDecodeWorker::DecodeResultWorker(ThreadSafeQueue<DecodeResult>& part_q
         auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, get_transform_cb(), calibration, true);
         part_q.Emplace(success, part_id, part_bytes);
         send_decode_image_result_cb(frame1, success, result_imgs);
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 }
 
-void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendAutoTransformCb send_auto_trasform_cb, int interval) {
-    constexpr int THRESHOLD_NUM = 256;
-    constexpr int LOOP_NUM = 4;
+void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_q, ThreadSafeQueue<std::pair<uint64_t, cv::Mat>>& frame_q, GetTransformCb get_transform_cb, const Calibration& calibration, SendAutoTransformCb send_auto_trasform_cb) {
+    constexpr std::array<int, 2> PIXELIZATION_CHANNEL_RANGE{150, 180};
+    constexpr int PIXELIZATION_CHANNEL_DIFF = 3;
+    constexpr int LOOP_NUM = 8;
     uint64_t frame_num = 0;
-    std::vector<float> pixelization_threshold_scores(THRESHOLD_NUM, 0.0f);
-    int cur_pixelization_threshold = 0;
+    std::vector<Transform::PixelizationThreshold> pixelization_thresholds;
+    for (int t = PIXELIZATION_CHANNEL_RANGE[0]; t < PIXELIZATION_CHANNEL_RANGE[1]; ++t) {
+        pixelization_thresholds.push_back({t, t, t});
+    }
+    for (int t1 = PIXELIZATION_CHANNEL_RANGE[0]; t1 < PIXELIZATION_CHANNEL_RANGE[1]; ++t1) {
+        for (int t2 = PIXELIZATION_CHANNEL_RANGE[0]; t2 < PIXELIZATION_CHANNEL_RANGE[1]; ++t2) {
+            for (int t3 = PIXELIZATION_CHANNEL_RANGE[0]; t3 < PIXELIZATION_CHANNEL_RANGE[1]; ++t3) {
+                if (t1 != t2 && t2 != t3 && t3 != t1 &&
+                    std::abs(t1 - t2) <= PIXELIZATION_CHANNEL_DIFF &&
+                    std::abs(t2 - t3) <= PIXELIZATION_CHANNEL_DIFF &&
+                    std::abs(t3 - t1) <= PIXELIZATION_CHANNEL_DIFF) {
+                    pixelization_thresholds.push_back({t1, t2, t3});
+                }
+            }
+        }
+    }
+    std::vector<AutoTransform> auto_transforms;
+    for (const auto& e1 : pixelization_thresholds) {
+        auto_transforms.emplace_back(e1);
+    }
+    int cur_auto_transform_index = 0;
+    std::map<AutoTransform, float> auto_transform_scores;
     while (true) {
         auto data = frame_q.Front();
         if (!data) {
@@ -95,35 +118,28 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
         auto& [frame_id, frame] = data.value();
         auto transform = get_transform_cb();
         bool has_succeeded = false;
-        for (int i = 0; i < LOOP_NUM; ++i) {
-            transform.pixelization_threshold[0] = cur_pixelization_threshold;
-            transform.pixelization_threshold[1] = cur_pixelization_threshold;
-            transform.pixelization_threshold[2] = cur_pixelization_threshold;
+        for (int loop_id = 0; loop_id < LOOP_NUM; ++loop_id) {
+            const auto& auto_transform = auto_transforms[cur_auto_transform_index];
+            std::tie(transform.pixelization_threshold) = auto_transform;
             auto [success, part_id, part_bytes, part_symbols, frame1, result_imgs] = m_image_decoder.Decode(frame, transform, calibration, false);
-            if (!has_succeeded && (success || i == LOOP_NUM - 1)) {
+            if (!has_succeeded && (success || loop_id == LOOP_NUM - 1)) {
                 part_q.Emplace(success, part_id, part_bytes);
                 has_succeeded = true;
             }
-            pixelization_threshold_scores[cur_pixelization_threshold] = pixelization_threshold_scores[cur_pixelization_threshold] * 0.75f + static_cast<float>(success) * 0.25f;
-            cur_pixelization_threshold = (cur_pixelization_threshold + 1) % THRESHOLD_NUM;
+            auto_transform_scores[auto_transform] = auto_transform_scores[auto_transform] * 0.75f + static_cast<float>(success) * 0.25f;
+            cur_auto_transform_index = (cur_auto_transform_index + 1) % auto_transforms.size();
         }
         ++frame_num;
-        if ((frame_num & 0x7f) == 0) {
-            float total_score = 0.0f;
-            float weighted_sum = 0.0f;
-            for (int pixelization_threshold = 0; pixelization_threshold < THRESHOLD_NUM; pixelization_threshold++) {
-                total_score += pixelization_threshold_scores[pixelization_threshold];
-                weighted_sum += pixelization_threshold_scores[pixelization_threshold] * pixelization_threshold;
-            }
-            if (total_score > 0) {
-                int pixelization_threshold = static_cast<int>(std::round(weighted_sum / total_score));
-                transform.pixelization_threshold[0] = pixelization_threshold;
-                transform.pixelization_threshold[1] = pixelization_threshold;
-                transform.pixelization_threshold[2] = pixelization_threshold;
+        if ((frame_num & 0x1f) == 0) {
+            auto it = std::max_element(auto_transform_scores.begin(), auto_transform_scores.end(), [](const std::pair<AutoTransform, float>& e1, const std::pair<AutoTransform, float>& e2) { return e1.second < e2.second; });
+            const auto& max_score_auto_transform = it->first;
+            const auto& max_score = it->second;
+            if (max_score > 0) {
+                std::tie(transform.pixelization_threshold) = max_score_auto_transform;
                 send_auto_trasform_cb(transform);
             }
         }
-        std::this_thread::sleep_for(std::chrono::milliseconds(interval));
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 }
 

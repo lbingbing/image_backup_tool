@@ -22,6 +22,8 @@ class App:
         self.part_q = queue.Queue(maxsize=4)
         self.fetch_image_thread = None
         self.decode_image_threads = []
+        self.decode_image_result_thread = None
+        self.auto_transform_thread = None
         self.save_part_thread = None
         self.transform_lock = threading.Lock()
         self.running = [False]
@@ -41,10 +43,24 @@ class App:
 
         self.fetch_image_thread = threading.Thread(target=self.image_decode_worker.fetch_image_worker, args=(self.running, self.running_lock, self.frame_q, 25))
         self.fetch_image_thread.start()
+
         for i in range(self.mp):
             t = threading.Thread(target=self.image_decode_worker.decode_image_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration))
             t.start()
             self.decode_image_threads.append(t)
+
+        def send_decode_image_result_cb(img, success, result_imgs):
+            pass
+
+        self.decode_image_result_thread = threading.Thread(target=self.image_decode_worker.decode_result_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_decode_image_result_cb))
+        self.decode_image_result_thread.start()
+
+        def send_auto_transform_cb(transform):
+            with self.transform_lock:
+                self.transform = transform.clone()
+
+        self.auto_transform_thread = threading.Thread(target=self.image_decode_worker.auto_transform_worker, args=(self.part_q, self.frame_q, get_transform_fn, self.calibration, send_auto_transform_cb))
+        self.auto_transform_thread.start()
 
         def save_part_progress_cb(save_part_progress):
             s = '{} frames processed, {}/{} parts transferred, fps={:.2f}, done_fps={:.2f}, bps={:.0f}, left_time={:0>2d}d{:0>2d}h{:0>2d}m{:0>2d}s'.format(save_part_progress.frame_num, save_part_progress.done_part_num, save_part_progress.part_num, save_part_progress.fps, save_part_progress.done_fps, save_part_progress.bps, save_part_progress.left_days, save_part_progress.left_hours, save_part_progress.left_minutes, save_part_progress.left_seconds)
@@ -65,12 +81,16 @@ class App:
             self.running[0] = False
         self.fetch_image_thread.join()
         self.fetch_image_thread = None
-        for i in range(self.mp):
+        for i in range(self.mp + 2):
             self.frame_q.put(None)
         self.frame_q.join()
         for t in self.decode_image_threads:
             t.join()
         self.decode_image_threads.clear()
+        self.decode_image_result_thread.join()
+        self.decode_image_result_thread = None
+        self.auto_transform_thread.join()
+        self.auto_transform_thread = None
         self.part_q.put(None)
         self.part_q.join()
         self.save_part_thread.join()

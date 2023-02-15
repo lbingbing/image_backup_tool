@@ -1,5 +1,6 @@
 import os
 import time
+import itertools
 
 import image_decoder
 import image_stream
@@ -89,7 +90,7 @@ class ImageDecodeWorker:
             if frame_num & 0x7 == 0:
                 transform = get_transform_cb()
 
-    def decode_result_worker(self, part_q, frame_q, get_transform_cb, calibration, send_decode_image_result_cb, interval):
+    def decode_result_worker(self, part_q, frame_q, get_transform_cb, calibration, send_decode_image_result_cb):
         while True:
             data = frame_q.get()
             frame_q.task_done()
@@ -99,14 +100,25 @@ class ImageDecodeWorker:
             success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, get_transform_cb(), calibration, True)
             part_q.put((success, part_id, part_bytes))
             send_decode_image_result_cb(frame1, success, result_imgs)
-            time.sleep(interval / 1000)
+            time.sleep(1)
 
-    def auto_transform_worker(self, part_q, frame_q, get_transform_cb, calibration, send_auto_trasform_cb, interval):
-        THRESHOLD_NUM = 256
+    def auto_transform_worker(self, part_q, frame_q, get_transform_cb, calibration, send_auto_trasform_cb):
+        PIXELIZATION_CHANNEL_RANGE = (150, 180)
+        PIXELIZATION_CHANNEL_DIFF = 3
         LOOP_NUM = 4
         frame_num = 0
-        pixelization_threshold_scores = [0 for i in range(THRESHOLD_NUM)]
-        cur_pixelization_threshold = 0
+        pixelization_thresholds = [(t, t, t) for t in range(PIXELIZATION_CHANNEL_RANGE[0], PIXELIZATION_CHANNEL_RANGE[1])]
+        for t1 in range(PIXELIZATION_CHANNEL_RANGE[0], PIXELIZATION_CHANNEL_RANGE[1]):
+            for t2 in range(PIXELIZATION_CHANNEL_RANGE[0], PIXELIZATION_CHANNEL_RANGE[1]):
+                for t3 in range(PIXELIZATION_CHANNEL_RANGE[0], PIXELIZATION_CHANNEL_RANGE[1]):
+                    if t1 != t2 and t2 != t3 and t3 != t1 and \
+                       abs(t1 - t2) <= PIXELIZATION_CHANNEL_DIFF and \
+                       abs(t2 - t3) <= PIXELIZATION_CHANNEL_DIFF and \
+                       abs(t3 - t1) <= PIXELIZATION_CHANNEL_DIFF:
+                        pixelization_thresholds.append((t1, t2, t3));
+        auto_transforms = list(itertools.product(pixelization_thresholds))
+        cur_auto_transform_index = 0
+        auto_transform_scores = {}
         while True:
             data = frame_q.get()
             frame_q.task_done()
@@ -115,26 +127,24 @@ class ImageDecodeWorker:
             frame_id, frame = data
             transform = get_transform_cb()
             has_succeeded = False
-            for i in range(LOOP_NUM):
-                transform.pixelization_threshold = (cur_pixelization_threshold, ) * 3
+            for loop_id in range(LOOP_NUM):
+                transform.pixelization_threshold, = auto_transforms[cur_auto_transform_index]
                 success, part_id, part_bytes, part_symbols, frame1, result_imgs = self.image_decoder.decode(frame, transform, calibration, False)
-                if not has_succeeded and (success or i == LOOP_NUM - 1):
+                if not has_succeeded and (success or loop_id == LOOP_NUM - 1):
                     part_q.put((success, part_id, part_bytes))
                     has_succeeded = True
-                pixelization_threshold_scores[cur_pixelization_threshold] = pixelization_threshold_scores[cur_pixelization_threshold] * 0.75 + float(success) * 0.25
-                cur_pixelization_threshold = (cur_pixelization_threshold + 1) % THRESHOLD_NUM
+                auto_transform = auto_transforms[cur_auto_transform_index]
+                if auto_transform not in auto_transform_scores:
+                    auto_transform_scores[auto_transform] = 0
+                auto_transform_scores[auto_transform] = auto_transform_scores[auto_transform] * 0.75 + float(success) * 0.25
+                cur_auto_transform_index = (cur_auto_transform_index + 1) % len(auto_transforms)
             frame_num += 1
-            if frame_num & 0x7f == 0:
-                total_score = 0
-                weighted_sum = 0
-                for pixelization_threshold in range(THRESHOLD_NUM):
-                    total_score += pixelization_threshold_scores[pixelization_threshold]
-                    weighted_sum += pixelization_threshold_scores[pixelization_threshold] * pixelization_threshold
+            if frame_num & 0x1f == 0:
+                max_score_auto_transform, max_score = max(auto_transform_scores.items(), key=lambda e: e[1])
                 if total_score > 0:
-                    pixelization_threshold = round(weighted_sum / total_score)
-                    transform.pixelization_threshold = (pixelization_threshold, ) * 3
+                    transform.pixelization_threshold, = max_score_auto_transform
                     send_auto_trasform_cb(transform)
-            time.sleep(interval / 1000)
+            time.sleep(1)
 
     def save_part_worker(self, running, running_lock, part_q, output_file, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server):
         symbol_type = self.image_decoder.symbol_codec.symbol_type
