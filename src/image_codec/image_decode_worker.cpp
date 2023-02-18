@@ -131,11 +131,19 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
         }
         ++frame_num;
         if ((frame_num & 0x1f) == 0) {
-            auto it = std::max_element(auto_transform_scores.begin(), auto_transform_scores.end(), [](const std::pair<AutoTransform, float>& e1, const std::pair<AutoTransform, float>& e2) { return e1.second < e2.second; });
-            const auto& max_score_auto_transform = it->first;
-            const auto& max_score = it->second;
-            if (max_score > 0) {
-                std::tie(transform.pixelization_threshold) = max_score_auto_transform;
+            float total_score = 0;
+            std::array<float, 3> pixelization_threshold_weighted_sum{0, 0, 0};
+            for (const auto& e : auto_transform_scores) {
+                const auto& [pixelization_threshold] = e.first;
+                total_score += e.second;
+                pixelization_threshold_weighted_sum[0] += pixelization_threshold[0] * e.second;
+                pixelization_threshold_weighted_sum[1] += pixelization_threshold[1] * e.second;
+                pixelization_threshold_weighted_sum[2] += pixelization_threshold[2] * e.second;
+            }
+            if (total_score > 0) {
+                transform.pixelization_threshold[0] = static_cast<int>(std::round(pixelization_threshold_weighted_sum[0] / total_score));
+                transform.pixelization_threshold[1] = static_cast<int>(std::round(pixelization_threshold_weighted_sum[1] / total_score));
+                transform.pixelization_threshold[2] = static_cast<int>(std::round(pixelization_threshold_weighted_sum[2] / total_score));
                 send_auto_trasform_cb(transform);
             }
         }

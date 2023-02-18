@@ -115,7 +115,7 @@ class ImageDecodeWorker:
                        abs(t1 - t2) <= PIXELIZATION_CHANNEL_DIFF and \
                        abs(t2 - t3) <= PIXELIZATION_CHANNEL_DIFF and \
                        abs(t3 - t1) <= PIXELIZATION_CHANNEL_DIFF:
-                        pixelization_thresholds.append((t1, t2, t3));
+                        pixelization_thresholds.append((t1, t2, t3))
         auto_transforms = list(itertools.product(pixelization_thresholds))
         cur_auto_transform_index = 0
         auto_transform_scores = {}
@@ -140,9 +140,18 @@ class ImageDecodeWorker:
                 cur_auto_transform_index = (cur_auto_transform_index + 1) % len(auto_transforms)
             frame_num += 1
             if frame_num & 0x1f == 0:
-                max_score_auto_transform, max_score = max(auto_transform_scores.items(), key=lambda e: e[1])
+                total_score = 0
+                pixelization_threshold_weighted_sum = [0, 0, 0]
+                for auto_transform, score in auto_transform_scores.items():
+                    pixelization_threshold, = auto_transform
+                    total_score += score
+                    pixelization_threshold_weighted_sum[0] += pixelization_threshold[0] * score
+                    pixelization_threshold_weighted_sum[1] += pixelization_threshold[1] * score
+                    pixelization_threshold_weighted_sum[2] += pixelization_threshold[2] * score
                 if total_score > 0:
-                    transform.pixelization_threshold, = max_score_auto_transform
+                    transform.pixelization_threshold[0] = round(pixelization_threshold_weighted_sum[0] / total_score)
+                    transform.pixelization_threshold[1] = round(pixelization_threshold_weighted_sum[1] / total_score)
+                    transform.pixelization_threshold[2] = round(pixelization_threshold_weighted_sum[2] / total_score)
                     send_auto_trasform_cb(transform)
             time.sleep(1)
 
