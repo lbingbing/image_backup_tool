@@ -12,8 +12,7 @@
 
 #include "image_codec.h"
 
-class CalibrateThread : public QThread
-{
+class CalibrateThread : public QThread {
     Q_OBJECT
 
 public:
@@ -31,8 +30,7 @@ private:
     std::function<void(ImageDecodeWorker::CalibrateCb, ImageDecodeWorker::SendCalibrationImageResultCb, ImageDecodeWorker::CalibrationProgressCb)> m_worker_fn;
 };
 
-class DecodeImageResultThread : public QThread
-{
+class DecodeImageResultThread : public QThread {
     Q_OBJECT
 
 public:
@@ -48,8 +46,7 @@ private:
     std::function<void(ImageDecodeWorker::SendDecodeImageResultCb)> m_worker_fn;
 };
 
-class AutoTransformThread : public QThread
-{
+class AutoTransformThread : public QThread {
     Q_OBJECT
 
 public:
@@ -65,8 +62,7 @@ private:
     std::function<void(ImageDecodeWorker::SendAutoTransformCb)> m_worker_fn;
 };
 
-class SavePartThread : public QThread
-{
+class SavePartThread : public QThread {
     Q_OBJECT
 
 public:
@@ -86,8 +82,7 @@ private:
     std::function<void(ImageDecodeWorker::SavePartProgressCb, ImageDecodeWorker::SavePartCompleteCb, ImageDecodeWorker::SavePartErrorCb, Task::FinalizationStartCb, Task::FinalizationProgressCb)> m_worker_fn;
 };
 
-class Widget : public QWidget
-{
+class Widget : public QWidget {
     Q_OBJECT
 
 public:

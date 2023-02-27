@@ -31,7 +31,7 @@ class SymbolCodec:
 
     def encode(self, part_id, part_bytes, frame_size):
         symbol_bytes = bytearray(frame_size)
-        clib.symbol_codec_encode_c.argtypes = [ctypes.c_void_p, ctypes.c_uint8 * frame_size, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_int]
+        clib.symbol_codec_encode_c.argtypes = [ctypes.c_void_p, ctypes.c_uint8 * frame_size, ctypes.c_uint32, ctypes.c_char_p, ctypes.c_int, ctypes.c_int]
         clib.symbol_codec_encode_c(self.handle, (ctypes.c_uint8 * frame_size).from_buffer(symbol_bytes), part_id, part_bytes, len(part_bytes), frame_size)
         return list(symbol_bytes)
 

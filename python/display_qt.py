@@ -4,6 +4,7 @@ import enum
 import struct
 import re
 import time
+import configparser
 
 from PySide6 import QtCore, QtWidgets, QtGui
 
@@ -32,14 +33,15 @@ class State(enum.Enum):
 class Context:
     def __init__(self):
         self.state = State.CONFIG
-        self.symbol_type = symbol_codec.SymbolType.SYMBOL1
-        self.tile_x_num = 1
-        self.tile_y_num = 1
-        self.tile_x_size = 40
-        self.tile_y_size = 40
-        self.pixel_size = 10
-        self.space_size = 1
-        self.calibration_pixel_size = 5
+        self.symbol_type = None
+        self.tile_x_num = None
+        self.tile_y_num = None
+        self.tile_x_size = None
+        self.tile_y_size = None
+        self.pixel_size = None
+        self.space_size = None
+        self.calibration_pixel_size = None
+        self.task_status_server = None
 
 @enum.unique
 class CalibrationMode(enum.Enum):
@@ -53,18 +55,18 @@ class CalibrationPage(QtWidgets.QWidget):
     def __init__(self, parameters, context):
         super().__init__()
 
-        self.context = context
         self.parameters = parameters
+        self.context = context
 
         layout = QtWidgets.QHBoxLayout(self)
 
-        self.calibration_button = QtWidgets.QPushButton()
-        self.calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
-        self.calibration_button.setFixedWidth(100)
-        self.calibration_button.setText('calibrate')
-        self.calibration_button.setCheckable(True)
-        self.calibration_button.clicked.connect(self.toggle_calibration_start_stop)
-        layout.addWidget(self.calibration_button)
+        calibration_button = QtWidgets.QPushButton()
+        calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        calibration_button.setFixedWidth(100)
+        calibration_button.setText('calibrate')
+        calibration_button.setCheckable(True)
+        calibration_button.clicked.connect(self.toggle_calibration_start_stop)
+        layout.addWidget(calibration_button)
 
         self.config_frame = QtWidgets.QFrame()
         self.config_frame.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Sunken)
@@ -86,8 +88,8 @@ class CalibrationPage(QtWidgets.QWidget):
         config_frame_layout.addWidget(symbol_type_label)
         self.symbol_type_combo_box = QtWidgets.QComboBox()
         for t in symbol_codec.SymbolType:
-            self.symbol_type_combo_box.addItem(t.name.lower(), t)
-        self.symbol_type_combo_box.setCurrentIndex(0)
+            self.symbol_type_combo_box.addItem(t.name.lower())
+        self.symbol_type_combo_box.setCurrentIndex(self.context.symbol_type.value)
         config_frame_layout.addWidget(self.symbol_type_combo_box)
 
         tile_x_num_label = QtWidgets.QLabel('tile_x_num')
@@ -176,8 +178,8 @@ class TaskPage(QtWidgets.QWidget):
     def __init__(self, parameters, context):
         super().__init__()
 
-        self.context = context
         self.parameters = parameters
+        self.context = context
 
         self.target_file_path = None
         self.raw_bytes = None
@@ -254,8 +256,8 @@ class TaskPage(QtWidgets.QWidget):
         config_frame_layout.addWidget(symbol_type_label)
         self.symbol_type_combo_box = QtWidgets.QComboBox()
         for t in symbol_codec.SymbolType:
-            self.symbol_type_combo_box.addItem(t.name.lower(), t)
-        self.symbol_type_combo_box.setCurrentIndex(0)
+            self.symbol_type_combo_box.addItem(t.name.lower())
+        self.symbol_type_combo_box.setCurrentIndex(self.context.symbol_type.value)
         config_frame_layout.addWidget(self.symbol_type_combo_box)
 
         tile_x_num_label = QtWidgets.QLabel('tile_x_num')
@@ -324,11 +326,11 @@ class TaskPage(QtWidgets.QWidget):
         task_status_server_layout = QtWidgets.QHBoxLayout()
         task_frame_layout.addLayout(task_status_server_layout)
 
-        self.task_status_server_checkbox = QtWidgets.QCheckBox('task_status_server')
-        self.task_status_server_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_status_server_checkbox.setFixedWidth(140)
-        self.task_status_server_checkbox.stateChanged.connect(self.toggle_task_status_server)
-        task_status_server_layout.addWidget(self.task_status_server_checkbox)
+        task_status_server_checkbox = QtWidgets.QCheckBox('task_status_server')
+        task_status_server_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        task_status_server_checkbox.setFixedWidth(140)
+        task_status_server_checkbox.stateChanged.connect(self.toggle_task_status_server)
+        task_status_server_layout.addWidget(task_status_server_checkbox)
 
         self.task_status_server_frame = QtWidgets.QFrame()
         self.task_status_server_frame.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Sunken)
@@ -336,21 +338,21 @@ class TaskPage(QtWidgets.QWidget):
 
         task_status_server_frame_layout = QtWidgets.QHBoxLayout(self.task_status_server_frame)
 
-        task_status_server_label= QtWidgets.QLabel('server')
+        task_status_server_label = QtWidgets.QLabel('server')
         task_status_server_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         task_status_server_label.setFixedWidth(50)
         task_status_server_frame_layout.addWidget(task_status_server_label)
 
-        self.task_status_server_line_edit = QtWidgets.QLineEdit()
+        self.task_status_server_line_edit = QtWidgets.QLineEdit(self.context.task_status_server)
         self.task_status_server_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.task_status_server_line_edit.setFixedWidth(140)
         task_status_server_frame_layout.addWidget(self.task_status_server_line_edit)
 
-        self.task_status_auto_update_checkbox = QtWidgets.QCheckBox('auto_update')
-        self.task_status_auto_update_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_status_auto_update_checkbox.setFixedWidth(100)
-        self.task_status_auto_update_checkbox.stateChanged.connect(self.toggle_task_status_auto_update)
-        task_status_server_frame_layout.addWidget(self.task_status_auto_update_checkbox)
+        task_status_auto_update_checkbox = QtWidgets.QCheckBox('auto_update')
+        task_status_auto_update_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        task_status_auto_update_checkbox.setFixedWidth(100)
+        task_status_auto_update_checkbox.stateChanged.connect(self.toggle_task_status_auto_update)
+        task_status_server_frame_layout.addWidget(task_status_auto_update_checkbox)
 
         task_status_server_layout.addStretch(1)
 
@@ -376,9 +378,9 @@ class TaskPage(QtWidgets.QWidget):
         self.interval_spin_box.valueChanged.connect(self.set_interval)
         display_config_frame_layout.addWidget(self.interval_spin_box)
 
-        self.auto_navigate_fps_label = QtWidgets.QLabel('auto_navigate_fps')
-        self.auto_navigate_fps_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        display_config_frame_layout.addWidget(self.auto_navigate_fps_label)
+        auto_navigate_fps_label = QtWidgets.QLabel('auto_navigate_fps')
+        auto_navigate_fps_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        display_config_frame_layout.addWidget(auto_navigate_fps_label)
         self.auto_navigate_fps_value_label = QtWidgets.QLabel('-')
         self.auto_navigate_fps_value_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         self.auto_navigate_fps_value_label.setFixedWidth(50)
@@ -566,7 +568,7 @@ class TaskPage(QtWidgets.QWidget):
             self.auto_navigate_frame_num += 1
             if self.auto_navigate_frame_num == self.auto_navigate_update_fps_interval:
                 t = time.time()
-                delta_t = t - self.auto_navigate_time
+                delta_t = max(t - self.auto_navigate_time, 0.001)
                 self.auto_navigate_time = t
                 fps = self.auto_navigate_frame_num / delta_t
                 self.auto_navigate_fps = self.auto_navigate_fps * 0.5 + fps * 0.5
@@ -694,8 +696,10 @@ class Widget(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
 
-        self.context = Context()
         self.parameters = Parameters()
+        self.context = Context()
+
+        self.load_config()
 
         layout = QtWidgets.QVBoxLayout(self)
         layout.setSpacing(0)
@@ -753,6 +757,19 @@ class Widget(QtWidgets.QWidget):
         self.task_page.part_navigated.connect(self.canvas.draw_part)
         self.task_page.task_stopped.connect(self.stop_task)
 
+    def load_config(self):
+        config = configparser.ConfigParser()
+        config.read('display_qt.ini')
+        self.context.symbol_type = symbol_codec.SymbolType[config['DEFAULT']['symbol_type'].upper()]
+        self.context.tile_x_num = int(config['DEFAULT']['tile_x_num'])
+        self.context.tile_y_num = int(config['DEFAULT']['tile_y_num'])
+        self.context.tile_x_size = int(config['DEFAULT']['tile_x_size'])
+        self.context.tile_y_size = int(config['DEFAULT']['tile_y_size'])
+        self.context.pixel_size = int(config['DEFAULT']['pixel_size'])
+        self.context.space_size = int(config['DEFAULT']['space_size'])
+        self.context.calibration_pixel_size = int(config['DEFAULT']['calibration_pixel_size'])
+        self.context.task_status_server = config['DEFAULT']['task_status_server']
+
     def set_symbol_type(self, index):
         self.context.symbol_type = symbol_codec.SymbolType(index)
 
@@ -785,7 +802,7 @@ class Widget(QtWidgets.QWidget):
         self.control_tab.setTabEnabled(1, True)
         self.canvas.clear()
 
-    def start_task(self, *args):
+    def start_task(self):
         self.control_tab.setTabEnabled(0, False)
 
     def stop_task(self):

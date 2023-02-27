@@ -2,6 +2,7 @@ set(file_to_install
     decode_image_stream.py
     decode_image_stream_qt.py
     display_curses.py
+    display_qt.ini
     display_qt.py
     image_codec_types.py
     image_decode_task.py

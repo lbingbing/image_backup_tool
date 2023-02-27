@@ -10,7 +10,7 @@ bool test_symbol_codec(const std::string& symbol_type_str) {
     for (int frame_size = 0; frame_size < 4096; frame_size += 7) {
         if (frame_size * symbol_codec->BitNumPerSymbol() / 8 >= SymbolCodec::META_BYTE_NUM + Task::MIN_PART_BYTE_NUM) {
             Dim dim{1, 1, frame_size, 1};
-            uint32_t part_byte_num = get_part_byte_num(symbol_type, dim);
+            int part_byte_num = get_part_byte_num(symbol_type, dim);
             for (int padding_byte_num = 0; padding_byte_num < 128; padding_byte_num += 3) {
                 if (padding_byte_num < part_byte_num) {
                     Bytes part_bytes1;

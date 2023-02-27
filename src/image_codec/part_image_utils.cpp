@@ -70,18 +70,18 @@ Bytes img_to_msg_bytes(const cv::Mat& img) {
 
 }
 
-std::tuple<std::unique_ptr<SymbolCodec>, uint32_t, Bytes, uint32_t> prepare_part_images(const std::string& target_file, SymbolType symbol_type, const Dim& dim) {
+std::tuple<std::unique_ptr<SymbolCodec>, int, Bytes, uint32_t> prepare_part_images(const std::string& target_file, SymbolType symbol_type, const Dim& dim) {
     auto symbol_codec = create_symbol_codec(symbol_type);
     auto part_byte_num = get_part_byte_num(symbol_type, dim);
     if (part_byte_num < Task::MIN_PART_BYTE_NUM) throw invalid_image_codec_argument("invalid part_byte_num '" + std::to_string(part_byte_num) + "'");
     auto res = get_task_bytes(target_file, part_byte_num);
-    auto raw_bytes = std::move(res.first);
-    auto part_num = res.second;
+    auto& raw_bytes = std::get<0>(res);
+    auto part_num = std::get<1>(res);
     std::cout << part_num << " parts\n";
     return std::make_tuple(std::move(symbol_codec), part_byte_num, std::move(raw_bytes), part_num);
 }
 
-GenPartImageFn1 generate_part_images(const Dim& dim, int pixel_size, int space_size, SymbolCodec* symbol_codec, uint32_t part_byte_num, const Bytes& raw_bytes, uint32_t part_num) {
+GenPartImageFn1 generate_part_images(const Dim& dim, int pixel_size, int space_size, SymbolCodec* symbol_codec, int part_byte_num, const Bytes& raw_bytes, uint32_t part_num) {
     uint32_t cur_part_id = 0;
     return [dim, pixel_size, space_size, symbol_codec, part_byte_num, &raw_bytes, part_num, cur_part_id]() mutable {
         if (cur_part_id < part_num) {

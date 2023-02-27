@@ -345,7 +345,7 @@ void Widget::LoadCalibration() {
             m_save_calibration_button->setEnabled(true);
         }
     } else {
-        QMessageBox::warning(this, "Warning", std::string("can't find calibration file '" + calibration_path + "'").c_str(), QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::warning(this, "Warning", std::string("can't find calibration file '" + calibration_path + "'").c_str());
     }
 }
 
@@ -487,7 +487,7 @@ void Widget::ToggleTaskStatusServer() {
             port = parse_task_status_server_port(m_task_status_server_port_line_edit->text().toStdString());
         }
         catch (const invalid_image_codec_argument& e) {
-            QMessageBox::warning(this, "Warning", std::string("invalid task status server port '" + m_task_status_server_port_line_edit->text().toStdString() + "'").c_str(), QMessageBox::Ok, QMessageBox::Ok);
+            QMessageBox::warning(this, "Warning", std::string("invalid task status server port '" + m_task_status_server_port_line_edit->text().toStdString() + "'").c_str());
         }
         if (port > 0) {
             m_task_status_server.Start(port);
@@ -513,7 +513,7 @@ void Widget::LoadTransform() {
         }
         UpdateTransformUI(transform);
     } else {
-        QMessageBox::warning(this, "Warning", std::string("can't find transform file '" + transform_path + "'").c_str(), QMessageBox::Ok, QMessageBox::Ok);
+        QMessageBox::warning(this, "Warning", std::string("can't find transform file '" + transform_path + "'").c_str());
     }
 }
 
@@ -592,7 +592,7 @@ void Widget::UpdateAutoTransform(Transform transform) {
 void Widget::TaskSavePartComplete() {
     StopTask();
     m_task_button->setChecked(false);
-    QMessageBox::information(this, "Info", "transfer done", QMessageBox::Ok, QMessageBox::Ok);
+    QMessageBox::information(this, "Info", "transfer done");
     //close();
 }
 
@@ -607,7 +607,7 @@ void Widget::TaskFinalizationProgress(Task::FinalizationProgress finalization_pr
 }
 
 void Widget::ErrorMsg(std::string msg) {
-    QMessageBox::critical(this, "Error", msg.c_str(), QMessageBox::Ok, QMessageBox::Ok);
+    QMessageBox::critical(this, "Error", msg.c_str());
     close();
 }
 

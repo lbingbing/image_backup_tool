@@ -133,19 +133,19 @@ void Task::Print(int64_t show_undone_part_num) const {
     }
 }
 
-uint32_t get_part_byte_num(SymbolType symbol_type, const Dim& dim) {
+int get_part_byte_num(SymbolType symbol_type, const Dim& dim) {
     auto codec = create_symbol_codec(symbol_type);
     return dim.tile_x_num * dim.tile_y_num * dim.tile_x_size * dim.tile_y_size * codec->BitNumPerSymbol() / 8 - SymbolCodec::META_BYTE_NUM;
 }
 
-std::pair<Bytes, uint32_t> get_task_bytes(const std::string& file_path, uint32_t part_byte_num) {
+std::tuple<Bytes, uint32_t> get_task_bytes(const std::string& file_path, int part_byte_num) {
     std::ifstream f(file_path, std::ios_base::binary);
     f.seekg(0, std::ios_base::end);
     uint64_t file_size = f.tellg();
     Bytes raw_bytes(file_size);
     f.seekg(0, std::ios_base::beg);
     f.read(reinterpret_cast<char*>(raw_bytes.data()), file_size);
-    uint32_t left_bytes_num1 = file_size % part_byte_num;
+    int left_bytes_num1 = file_size % part_byte_num;
     Bytes padding_bytes1;
     if (left_bytes_num1) padding_bytes1.resize(part_byte_num - left_bytes_num1, 0);
     Bytes size_bytes(reinterpret_cast<Byte*>(&file_size), reinterpret_cast<Byte*>(&file_size)+sizeof(file_size));
@@ -154,7 +154,7 @@ std::pair<Bytes, uint32_t> get_task_bytes(const std::string& file_path, uint32_t
     raw_bytes.insert(raw_bytes.end(), size_bytes.begin(), size_bytes.end());
     raw_bytes.insert(raw_bytes.end(), padding_bytes2.begin(), padding_bytes2.end());
     uint32_t part_num = raw_bytes.size() / part_byte_num;
-    return std::make_pair(std::move(raw_bytes), part_num);
+    return std::make_tuple(std::move(raw_bytes), part_num);
 }
 
 std::tuple<SymbolType, Dim, uint32_t, uint32_t, Bytes> from_task_bytes(const Bytes& task_bytes) {

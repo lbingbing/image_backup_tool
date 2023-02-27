@@ -2,6 +2,7 @@ add_library(image_codec SHARED
     base64.cpp
     image_codec_types.cpp
     image_decode_task.cpp
+    image_decode_task_status_client.cpp
     image_decode_task_status_server.cpp
     image_decode_worker.cpp
     image_decoder.cpp

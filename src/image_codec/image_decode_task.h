@@ -25,6 +25,7 @@ public:
     IMAGE_CODEC_API void Load();
     IMAGE_CODEC_API void SetFinalizationCb(FinalizationStartCb finalization_start_cb, FinalizationProgressCb finalization_progress_cb, FinalizationCompleteCb finalization_complete_cb);
     IMAGE_CODEC_API bool AllocateBlob();
+    IMAGE_CODEC_API bool IsPartDone(uint32_t part_id) const;
     IMAGE_CODEC_API void UpdatePart(uint32_t part_id, const Bytes& part_bytes);
     IMAGE_CODEC_API void Flush();
     IMAGE_CODEC_API bool IsDone() const;
@@ -40,8 +41,6 @@ public:
     IMAGE_CODEC_API Bytes ToTaskBytes() const;
 
 private:
-    bool IsPartDone(uint32_t part_id) const;
-
     std::string m_path;
     std::string m_task_path;
     std::string m_blob_path;
@@ -59,7 +58,7 @@ private:
     FinalizationCompleteCb m_finalization_complete_cb;
 };
 
-IMAGE_CODEC_API uint32_t get_part_byte_num(SymbolType symbol_type, const Dim& dim);
-IMAGE_CODEC_API std::pair<Bytes, uint32_t> get_task_bytes(const std::string& file_path, uint32_t part_byte_num);
+IMAGE_CODEC_API int get_part_byte_num(SymbolType symbol_type, const Dim& dim);
+IMAGE_CODEC_API std::tuple<Bytes, uint32_t> get_task_bytes(const std::string& file_path, int part_byte_num);
 IMAGE_CODEC_API std::tuple<SymbolType, Dim, uint32_t, uint32_t, Bytes> from_task_bytes(const Bytes& task_bytes);
 IMAGE_CODEC_API bool is_part_done(const Bytes& task_status_bytes, uint32_t part_id);

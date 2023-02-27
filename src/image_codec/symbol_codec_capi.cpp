@@ -27,7 +27,7 @@ IMAGE_CODEC_API int symbol_codec_bit_num_per_symbol_c(void* symbol_codec) {
     return reinterpret_cast<SymbolCodec*>(symbol_codec)->BitNumPerSymbol();
 }
 
-IMAGE_CODEC_API void symbol_codec_encode_c(void* symbol_codec, Byte* symbol_byte_p, uint32_t part_id, const Byte* part_byte_p, size_t part_byte_num, int frame_size) {
+IMAGE_CODEC_API void symbol_codec_encode_c(void* symbol_codec, Byte* symbol_byte_p, uint32_t part_id, const Byte* part_byte_p, int part_byte_num, int frame_size) {
     Bytes part_bytes(part_byte_p, part_byte_p+part_byte_num);
     Symbols symbols = reinterpret_cast<SymbolCodec*>(symbol_codec)->Encode(part_id, part_bytes, frame_size);
     std::copy_n(symbols.data(), frame_size, symbol_byte_p);
