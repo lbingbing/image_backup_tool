@@ -10,6 +10,7 @@ set(file_to_install
     image_decode_task_status_server.py
     image_decode_worker.py
     image_decoder.py
+    image_stream.ini
     image_stream.py
     parse_image_decode_task.py
     part_image_file_gen.py

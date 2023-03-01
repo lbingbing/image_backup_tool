@@ -3,6 +3,8 @@
 #include <fstream>
 #include <filesystem>
 
+#include <boost/program_options.hpp>
+
 #include <QtWidgets/QApplication>
 #include <QtWidgets/QHboxLayout>
 #include <QtWidgets/QVboxLayout>
@@ -759,38 +761,31 @@ Widget::Widget(QWidget* parent) : QWidget(parent) {
 
 void Widget::LoadConfig() {
     std::ifstream cfg_file("display_qt.ini");
-    std::regex symbol_type_regex("^symbol_type\\s*=\\s*(\\S+)$");
-    std::regex tile_x_num_regex("^tile_x_num\\s*=\\s*(\\S+)$");
-    std::regex tile_y_num_regex("^tile_y_num\\s*=\\s*(\\S+)$");
-    std::regex tile_x_size_regex("^tile_x_size\\s*=\\s*(\\S+)$");
-    std::regex tile_y_size_regex("^tile_y_size\\s*=\\s*(\\S+)$");
-    std::regex pixel_size_regex("^pixel_size\\s*=\\s*(\\S+)$");
-    std::regex space_size_regex("^space_size\\s*=\\s*(\\S+)$");
-    std::regex calibration_pixel_size_regex("^calibration_pixel_size\\s*=\\s*(\\S+)$");
-    std::regex task_status_server_regex("^task_status_server\\s*=\\s*(\\S+)$");
-    std::smatch match;
-    std::string line;
-    while (std::getline(cfg_file, line)) {
-        if (std::regex_match(line, match, symbol_type_regex)) {
-            m_context.symbol_type = parse_symbol_type(match[1].str());
-        } else if (std::regex_match(line, match, tile_x_num_regex)) {
-            m_context.tile_x_num = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, tile_y_num_regex)) {
-            m_context.tile_y_num = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, tile_x_size_regex)) {
-            m_context.tile_x_size = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, tile_y_size_regex)) {
-            m_context.tile_y_size = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, pixel_size_regex)) {
-            m_context.pixel_size = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, space_size_regex)) {
-            m_context.space_size = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, calibration_pixel_size_regex)) {
-            m_context.calibration_pixel_size = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, task_status_server_regex)) {
-            m_context.task_status_server = match[1].str();
-        }
-    }
+    std::string symbol_type_str;
+    boost::program_options::options_description desc;
+    auto desc_handler = desc.add_options();
+    desc_handler("DEFAULT.symbol_type", boost::program_options::value<std::string>(&symbol_type_str));
+    desc_handler("DEFAULT.tile_x_num", boost::program_options::value<int>(&m_context.tile_x_num));
+    desc_handler("DEFAULT.tile_y_num", boost::program_options::value<int>(&m_context.tile_y_num));
+    desc_handler("DEFAULT.tile_x_size", boost::program_options::value<int>(&m_context.tile_x_size));
+    desc_handler("DEFAULT.tile_y_size", boost::program_options::value<int>(&m_context.tile_y_size));
+    desc_handler("DEFAULT.pixel_size", boost::program_options::value<int>(&m_context.pixel_size));
+    desc_handler("DEFAULT.space_size", boost::program_options::value<int>(&m_context.space_size));
+    desc_handler("DEFAULT.calibration_pixel_size", boost::program_options::value<int>(&m_context.calibration_pixel_size));
+    desc_handler("DEFAULT.task_status_server", boost::program_options::value<std::string>(&m_context.task_status_server));
+    boost::program_options::variables_map vm;
+    store(parse_config_file(cfg_file, desc, false), vm);
+    notify(vm);
+    if (!vm.count("DEFAULT.symbol_type")) throw std::invalid_argument("DEFAULT.symbol_type not found");
+    if (!vm.count("DEFAULT.tile_x_num")) throw std::invalid_argument("DEFAULT.tile_x_num not found");
+    if (!vm.count("DEFAULT.tile_y_num")) throw std::invalid_argument("DEFAULT.tile_y_num not found");
+    if (!vm.count("DEFAULT.tile_x_size")) throw std::invalid_argument("DEFAULT.tile_x_size not found");
+    if (!vm.count("DEFAULT.tile_y_size")) throw std::invalid_argument("DEFAULT.tile_y_size not found");
+    if (!vm.count("DEFAULT.pixel_size")) throw std::invalid_argument("DEFAULT.pixel_size not found");
+    if (!vm.count("DEFAULT.space_size")) throw std::invalid_argument("DEFAULT.space_size not found");
+    if (!vm.count("DEFAULT.calibration_pixel_size")) throw std::invalid_argument("DEFAULT.calibration_pixel_size not found");
+    if (!vm.count("DEFAULT.task_status_server")) throw std::invalid_argument("DEFAULT.task_status_server not found");
+    m_context.symbol_type = parse_symbol_type(symbol_type_str);
 }
 
 void Widget::StartCalibration(CalibrationMode calibration_mode, std::vector<uint8_t> data) {

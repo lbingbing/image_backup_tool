@@ -4,6 +4,7 @@ import struct
 import base64
 import threading
 import socket
+import configparser
 
 import numpy as np
 import cv2 as cv
@@ -128,50 +129,18 @@ class SocketImageStream(ThreadedImageStream):
             return b''
 
 def create_image_stream():
-    stream_type = 'camera'
-    camera_url = 0
-    scale = 1
-    buffer_size = 64
-    ip = '127.0.0.1'
-    port = 8123
-    type_pattern = r'^type=(\S+)$'
-    camera_pattern = r'^camera=(\S+)$'
-    scale_pattern = r'^scale=(\S+)$'
-    buffer_size_pattern =r'^buffer_size=(\d+)$'
-    ip_pattern = r'^ip=(\S+)$'
-    port_pattern = r'^port=(\d+)$'
-    blank_pattern = r'^\s*(#.*)?$'
-    with open('image_stream.ini', encoding='utf-8') as f:
-        for line in f:
-            type_m = re.match(type_pattern, line)
-            camera_m = re.match(camera_pattern, line)
-            scale_m = re.match(scale_pattern, line)
-            buffer_size_m = re.match(buffer_size_pattern, line)
-            ip_m = re.match(ip_pattern, line)
-            port_m = re.match(port_pattern, line)
-            blank_m = re.match(blank_pattern, line)
-            if type_m:
-                stream_type = type_m.group(1)
-            elif camera_m:
-                camera_url = camera_m.group(1)
-            elif scale_m:
-                scale = int(scale_m.group(1))
-            elif buffer_size_m:
-                buffer_size = int(buffer_size_m.group(1))
-            elif ip_m:
-                ip = ip_m.group(1)
-            elif port_m:
-                port = int(port_m.group(1))
-            elif blank_m:
-                pass
-            else:
-                assert 0, 'unsupported config \'{}\''.format(line)
+    config = configparser.ConfigParser()
+    config.read('image_stream.ini')
+    stream_type = config.get('DEFAULT', 'stream_type', fallback='camera')
+    camera_url = config.get('DEFAULT', 'camera_url', fallback=0)
+    scale = config.getint('DEFAULT', 'scale', fallback=1)
+    buffer_size = config.getint('DEFAULT', 'buffer_size', fallback=64)
+    ip = config.get('DEFAULT', 'ip', fallback='127.0.0.1')
+    port = config.getint('DEFAULT', 'port', fallback=8123)
     if stream_type == 'camera':
         image_stream = CameraImageStream(camera_url, scale)
     elif stream_type == 'pipe':
         image_stream = PipeImageStream(buffer_size)
     elif stream_type == 'socket':
         image_stream = SocketImageStream(ip, port, buffer_size)
-    else:
-        assert 0, 'unsupported type \'{}\''.format(stream_type)
     return image_stream

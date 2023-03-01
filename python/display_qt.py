@@ -760,15 +760,15 @@ class Widget(QtWidgets.QWidget):
     def load_config(self):
         config = configparser.ConfigParser()
         config.read('display_qt.ini')
-        self.context.symbol_type = symbol_codec.SymbolType[config['DEFAULT']['symbol_type'].upper()]
-        self.context.tile_x_num = int(config['DEFAULT']['tile_x_num'])
-        self.context.tile_y_num = int(config['DEFAULT']['tile_y_num'])
-        self.context.tile_x_size = int(config['DEFAULT']['tile_x_size'])
-        self.context.tile_y_size = int(config['DEFAULT']['tile_y_size'])
-        self.context.pixel_size = int(config['DEFAULT']['pixel_size'])
-        self.context.space_size = int(config['DEFAULT']['space_size'])
-        self.context.calibration_pixel_size = int(config['DEFAULT']['calibration_pixel_size'])
-        self.context.task_status_server = config['DEFAULT']['task_status_server']
+        self.context.symbol_type = symbol_codec.SymbolType[config.get('DEFAULT', 'symbol_type').upper()]
+        self.context.tile_x_num = config.getint('DEFAULT', 'tile_x_num')
+        self.context.tile_y_num = config.getint('DEFAULT', 'tile_y_num')
+        self.context.tile_x_size = config.getint('DEFAULT', 'tile_x_size')
+        self.context.tile_y_size = config.getint('DEFAULT', 'tile_y_size')
+        self.context.pixel_size = config.getint('DEFAULT', 'pixel_size')
+        self.context.space_size = config.getint('DEFAULT', 'space_size')
+        self.context.calibration_pixel_size = config.getint('DEFAULT', 'calibration_pixel_size')
+        self.context.task_status_server = config.get('DEFAULT', 'task_status_server')
 
     def set_symbol_type(self, index):
         self.context.symbol_type = symbol_codec.SymbolType(index)

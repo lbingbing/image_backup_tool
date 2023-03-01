@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
-#include <regex>
+
+#include <boost/program_options.hpp>
 
 #include "image_stream.h"
 #include "base64.h"
@@ -130,53 +131,31 @@ Bytes SocketImageStream::FetchData() {
 }
 
 std::unique_ptr<ImageStream> create_image_stream() {
-    std::string type("camera");
+    std::string stream_type("camera");
     std::string camera_url("0");
     int scale = 1;
     size_t buffer_size = 64;
     std::string ip("127.0.0.1");
     int port = 8123;
     std::ifstream cfg_file("image_stream.ini");
-    std::regex type_regex("^type=(\\S+)$");
-    std::regex camera_regex("^camera=(\\S+)$");
-    std::regex scale_regex("^scale=(\\S+)$");
-    std::regex buffer_size_regex("^buffer_size=(\\d+)$");
-    std::regex ip_regex("^ip=(\\S+)$");
-    std::regex port_regex("^port=(\\d+)$");
-    std::regex blank_regex("^\\s*(#.*)?$");
-    std::smatch match;
-    std::string line;
-    while (std::getline(cfg_file, line)) {
-        if (std::regex_match(line, match, type_regex)) {
-            type = match[1].str();
-        } else if (std::regex_match(line, match, camera_regex)) {
-            camera_url = match[1].str();
-        } else if (std::regex_match(line, match, scale_regex)) {
-            scale = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, buffer_size_regex)) {
-            buffer_size = std::stoull(match[1].str());
-        } else if (std::regex_match(line, match, ip_regex)) {
-            ip = match[1].str();
-        } else if (std::regex_match(line, match, port_regex)) {
-            port = std::stoi(match[1].str());
-        } else if (std::regex_match(line, match, blank_regex)) {
-        } else {
-            std::string msg = "unsupported config '" + line + "'";
-            std::cerr << msg << "\n";
-            throw std::invalid_argument(msg);
-        }
-    }
+    boost::program_options::options_description desc;
+    auto desc_handler = desc.add_options();
+    desc_handler("DEFAULT.stream_type", boost::program_options::value<std::string>(&stream_type));
+    desc_handler("DEFAULT.camera_url", boost::program_options::value<std::string>(&camera_url));
+    desc_handler("DEFAULT.scale", boost::program_options::value<int>(&scale));
+    desc_handler("DEFAULT.buffer_size", boost::program_options::value<size_t>(&buffer_size));
+    desc_handler("DEFAULT.ip", boost::program_options::value<std::string>(&ip));
+    desc_handler("DEFAULT.port", boost::program_options::value<int>(&port));
+    boost::program_options::variables_map vm;
+    store(parse_config_file(cfg_file, desc, false), vm);
+    notify(vm);
     std::unique_ptr<ImageStream> image_stream;
-    if (type == "camera") {
+    if (stream_type == "camera") {
         image_stream = std::make_unique<CameraImageStream>(camera_url, scale);
-    } else if (type == "pipe") {
+    } else if (stream_type == "pipe") {
         image_stream = std::make_unique<PipeImageStream>(buffer_size);
-    } else if (type == "socket") {
+    } else if (stream_type == "socket") {
         image_stream = std::make_unique<SocketImageStream>(ip, port, buffer_size);
-    } else {
-        std::string msg = "unsupported type '" + type + "'";
-        std::cerr << msg << "\n";
-        throw std::invalid_argument(msg);
     }
     return image_stream;
 }
