@@ -60,7 +60,7 @@ void Task::UpdatePart(uint32_t part_id, const Bytes& part_bytes) {
 
     m_blob_buf.emplace_back(part_id, part_bytes);
 
-    if ((m_done_part_num & 0x3ff) == 0) {
+    if ((m_done_part_num & 0x1fff) == 0) {
         Flush();
     }
 }

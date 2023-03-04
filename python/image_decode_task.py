@@ -65,7 +65,7 @@ class Task:
 
         self.blob_buf.append((part_id, part_bytes))
 
-        if (self.done_part_num & 0xff) == 0:
+        if (self.done_part_num & 0x7ff) == 0:
             self.flush()
 
     def to_task_bytes(self):
