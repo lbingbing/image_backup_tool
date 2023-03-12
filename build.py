@@ -13,11 +13,16 @@ def run(cmd):
     else:
         assert 0
 
-cmds = [
-    'cmake -B build',
-    'cmake --build build --config release -j 4',
-    'cmake --install build --prefix image_backup_tool_release',
-    'pytest test.py -v',
-    ]
+if __name__ == '__main__':
+    import argparse
 
-run(cmds)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--debug', action='store_true', help='debug build')
+    args = parser.parse_args()
+
+    config = 'debug' if args.debug else 'release'
+    run([
+        'cmake -B build',
+        'cmake --build build --config {} -j 4'.format(config),
+        'cmake --install build --config {} --prefix image_backup_tool_release'.format(config),
+        ])

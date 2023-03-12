@@ -16,7 +16,9 @@ set(CMAKE_PREFIX_PATH
     ${CMAKE_PREFIX_PATH}
 )
 
+set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS program_options PATHS ${boost_dir} NO_DEFAULT_PATH)
+set(OpenCV_STATIC ON)
 find_package(OpenCV REQUIRED PATHS ${opencv_dir} NO_DEFAULT_PATH)
 find_package(Qt6 REQUIRED COMPONENTS Core Widgets PATHS ${qt_dir} NO_DEFAULT_PATH)
 
@@ -32,12 +34,6 @@ set(external_libs
 
 if(WIN32)
     set(external_binaries
-        "${opencv_dir}/x64/vc17/bin/opencv_core455.dll"
-        "${opencv_dir}/x64/vc17/bin/opencv_highgui455.dll"
-        "${opencv_dir}/x64/vc17/bin/opencv_imgcodecs455.dll"
-        "${opencv_dir}/x64/vc17/bin/opencv_imgproc455.dll"
-        "${opencv_dir}/x64/vc17/bin/opencv_videoio455.dll"
-        "${opencv_dir}/x64/vc17/bin/opencv_videoio_ffmpeg455_64.dll"
         "${qt_dir}/bin/Qt6Core.dll"
         "${qt_dir}/bin/Qt6Gui.dll"
         "${qt_dir}/bin/Qt6Widgets.dll"

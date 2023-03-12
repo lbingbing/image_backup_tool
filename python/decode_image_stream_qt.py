@@ -54,7 +54,7 @@ class Widget(QtWidgets.QWidget):
         self.task_running = [False]
         self.running_lock = threading.Lock()
 
-        self.monitor_on = False
+        self.monitor_on = True
         self.task_status_server_on = False
         self.task_status_server = image_decode_task_status_server.TaskStatusServer()
 
