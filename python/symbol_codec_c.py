@@ -1,17 +1,8 @@
-import platform
 import ctypes
 
-system_name = platform.system()
-if system_name == 'Windows':
-    clib = ctypes.cdll.LoadLibrary('./image_codec.dll')
-elif system_name == 'Linux':
-    clib = ctypes.cdll.LoadLibrary('./libimage_codec.so')
-elif system_name == 'Darwin':
-    clib = ctypes.cdll.LoadLibrary('./libimage_codec.dylib')
-else:
-    print('unknown system {}'.format(system_name))
-    sys.exit(1)
+import clib_utils
 
+clib = clib_utils.load_library('image_codec')
 clib.create_symbol_codec_c.argtypes = [ctypes.c_char_p]
 clib.create_symbol_codec_c.restype = ctypes.c_void_p
 clib.destroy_symbol_codec_c.argtypes = [ctypes.c_void_p]

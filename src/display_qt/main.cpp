@@ -1,16 +1,5 @@
-#include <QtWidgets/QApplication>
-
-#include "Widget.h"
+#include "display_qt.h"
 
 int main(int argc, char *argv[]) {
-    try {
-        QApplication app(argc, argv);
-        Widget widget(nullptr);
-        widget.show();
-        return app.exec();
-    }
-    catch (std::exception& e) {
-        std::cerr << e.what() << "\n";
-        return 1;
-    }
+    return run(argc, argv);
 }

@@ -2,25 +2,14 @@ import os
 import platform
 import subprocess
 
-def run(cmd, timeout=None):
-    system_name = platform.system()
-    if system_name == 'Linux':
-        env = {
-            'PATH': os.environ.get('PATH', '') + ':.',
-            'LD_LIBRARY_PATH': os.environ.get('LD_LIBRARY_PATH', '') + ':.',
-            }
-    elif system_name == 'Darwin':
-        env = {
-            'PATH': os.environ.get('PATH', '') + ':.',
-            'DYLD_LIBRARY_PATH': os.environ.get('DYLD_LIBRARY_PATH', '') + ':.',
-            }
-    else:
-        env = None
-    print(' '.join(cmd))
-    res = subprocess.run(cmd, timeout=timeout, env=env)
-    return res.returncode == 0
-
 os.chdir('image_backup_tool_release')
+
+def run(cmd, timeout=None):
+    if platform.system() in ('Linux', 'Darwin'):
+        os.environ['PATH'] = os.environ.get('PATH', '') + ':.'
+    print(' '.join(cmd))
+    res = subprocess.run(cmd, timeout=timeout)
+    return res.returncode == 0
 
 def test_test_symbol_codec_p():
     assert run(['python', 'test_symbol_codec.py'])

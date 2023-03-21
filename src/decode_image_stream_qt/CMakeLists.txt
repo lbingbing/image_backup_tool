@@ -12,5 +12,6 @@ set_target_properties(decode_image_stream_qt PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON
 )
+set_property(TARGET decode_image_stream_qt PROPERTY INSTALL_RPATH .)
 
 install(TARGETS decode_image_stream_qt DESTINATION ${release_dir})

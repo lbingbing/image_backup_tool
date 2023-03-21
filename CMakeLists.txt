@@ -44,7 +44,7 @@ set(internal_include_dirs ${CMAKE_SOURCE_DIR}/src/image_codec)
 
 if(WIN32)
     set(compile_flags -D_WIN32_WINNT=0x0601)
-elseif(APPLE)
+else()
     set(compile_flags "")
 endif()
 
@@ -55,6 +55,7 @@ function(add_exe dir name)
     target_compile_definitions(${name} PRIVATE ${compile_flags})
     target_include_directories(${name} PRIVATE ${internal_include_dirs} ${external_include_dirs})
     target_link_libraries(${name} PRIVATE image_codec ${external_libs})
+    set_property(TARGET ${name} PROPERTY INSTALL_RPATH .)
 
     install(TARGETS ${name} DESTINATION ${release_dir})
 endfunction()

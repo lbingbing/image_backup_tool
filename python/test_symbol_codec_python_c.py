@@ -1,13 +1,13 @@
 import sys
 
 import symbol_codec
-import symbol_codec_c_wrapper
+import symbol_codec_c
 import image_decode_task
 
 def test_symbol_codec(symbol_type_str):
     symbol_type = symbol_codec.parse_symbol_type(symbol_type_str)
-    symbol_codec_p = symbol_codec.create_symbol_codec(symbol_type)
-    symbol_codec_c = symbol_codec_c_wrapper.SymbolCodec(symbol_type)
+    codec_p = symbol_codec.create_symbol_codec(symbol_type)
+    codec_c = symbol_codec_c.SymbolCodec(symbol_type)
 
     part_id = 0
     for frame_size in range(0, 1024, 7):
@@ -17,12 +17,12 @@ def test_symbol_codec(symbol_type_str):
                 if padding_byte_num < part_byte_num:
                     part_bytes = bytes([i % 256 for i in range(part_byte_num - padding_byte_num)])
 
-                    symbols_p = symbol_codec_p.encode(part_id, part_bytes, frame_size)
-                    success_p, part_id_p, padded_part_bytes_p = symbol_codec_p.decode(symbols_p)
+                    symbols_p = codec_p.encode(part_id, part_bytes, frame_size)
+                    success_p, part_id_p, padded_part_bytes_p = codec_p.decode(symbols_p)
                     part_bytes_p = padded_part_bytes_p[:part_byte_num-padding_byte_num]
 
-                    symbols_c = symbol_codec_c.encode(part_id, part_bytes, frame_size)
-                    success_c, part_id_c, padded_part_bytes_c = symbol_codec_c.decode(symbols_c)
+                    symbols_c = codec_c.encode(part_id, part_bytes, frame_size)
+                    success_c, part_id_c, padded_part_bytes_c = codec_c.decode(symbols_c)
                     part_bytes_c = padded_part_bytes_c[:part_byte_num-padding_byte_num]
 
                     if symbols_p != symbols_c or \
@@ -50,7 +50,7 @@ def test_symbol_codec(symbol_type_str):
                         return False
                     part_id += 1
     print('{} codec {} tests pass'.format(symbol_type_str, part_id))
-    symbol_codec_c.destroy()
+    codec_c.destroy()
     return True
 
 is_pass = True

@@ -6,6 +6,6 @@
     #else
     #define IMAGE_CODEC_API __declspec(dllimport)
     #endif
-#elif __APPLE__
+#else
     #define IMAGE_CODEC_API
 #endif
