@@ -4,7 +4,6 @@
 #include <QtWidgets/QHboxLayout>
 #include <QtWidgets/QVboxLayout>
 #include <QtWidgets/QFormLayout>
-#include <QtWidgets/QGroupBox>
 #include <QtWidgets/QMessageBox>
 
 #include "Widget.h"
@@ -73,13 +72,10 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
         m_result_images[tile_y_id].resize(m_dim.tile_x_num);
     }
 
-    auto layout = new QVBoxLayout(this);
+    m_image_window = new QWidget();
+    m_image_window->setWindowFlags(Qt::WindowTitleHint | Qt::WindowMaximizeButtonHint);
 
-    auto image_layout = new QHBoxLayout();
-    layout->addLayout(image_layout);
-
-    const int image_w = 600;
-    const int image_h = 400;
+    auto image_layout = new QHBoxLayout(m_image_window);
 
     auto image_group_box = new QGroupBox("image");
     image_layout->addWidget(image_group_box);
@@ -88,7 +84,6 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
 
     m_image_label = new QLabel();
     m_image_label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-    m_image_label->setFixedSize(image_w, image_h);
     m_image_label->setScaledContents(true);
     image_layout1->addWidget(m_image_label);
 
@@ -105,24 +100,28 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
         for (int tile_x_id = 0; tile_x_id < m_dim.tile_x_num; ++tile_x_id) {
             auto result_image_label = new QLabel();
             result_image_label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            result_image_label->setFixedSize(image_w / m_dim.tile_x_num, image_h / m_dim.tile_y_num);
             result_image_label->setScaledContents(true);
             result_image_layout1->addWidget(result_image_label);
             m_result_image_labels[tile_y_id][tile_x_id] = result_image_label;
         }
     }
 
-    auto control_layout = new QHBoxLayout();
-    layout->addLayout(control_layout);
+    auto layout = new QVBoxLayout(this);
+
+    auto control_frame = new QFrame();
+    control_frame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    layout->addWidget(control_frame);
+
+    auto control_layout = new QHBoxLayout(control_frame);
 
     auto calibration_group_box = new QGroupBox("calibration");
+    calibration_group_box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     control_layout->addWidget(calibration_group_box);
 
     auto calibration_group_box_layout = new QHBoxLayout(calibration_group_box);
 
     m_calibrate_button = new QPushButton("calibrate");
     m_calibrate_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_calibrate_button->setFixedWidth(80);
     m_calibrate_button->setCheckable(true);
     connect(m_calibrate_button, &QPushButton::clicked, this, &Widget::ToggleCalibrationStartStop);
     calibration_group_box_layout->addWidget(m_calibrate_button);
@@ -132,79 +131,76 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
 
     m_save_calibration_button = new QPushButton("save calibration");
     m_save_calibration_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_save_calibration_button->setFixedWidth(120);
     m_save_calibration_button->setEnabled(false);
     connect(m_save_calibration_button, &QPushButton::clicked, this, &Widget::SaveCalibration);
     calibration_button_layout->addWidget(m_save_calibration_button);
 
     m_load_calibration_button = new QPushButton("load calibration");
     m_load_calibration_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_load_calibration_button->setFixedWidth(120);
     connect(m_load_calibration_button, &QPushButton::clicked, this, &Widget::LoadCalibration);
     calibration_button_layout->addWidget(m_load_calibration_button);
 
     m_clear_calibration_button = new QPushButton("clear calibration");
     m_clear_calibration_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_clear_calibration_button->setFixedWidth(120);
     m_clear_calibration_button->setEnabled(false);
     connect(m_clear_calibration_button, &QPushButton::clicked, this, &Widget::ClearCalibration);
     calibration_button_layout->addWidget(m_clear_calibration_button);
 
     auto task_group_box = new QGroupBox("task");
+    task_group_box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     control_layout->addWidget(task_group_box);
 
     auto task_group_box_layout = new QHBoxLayout(task_group_box);
 
     m_task_button = new QPushButton("start");
     m_task_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_button->setFixedWidth(80);
     m_task_button->setCheckable(true);
     connect(m_task_button, &QPushButton::clicked, this, &Widget::ToggleTaskStartStop);
     task_group_box_layout->addWidget(m_task_button);
 
     auto monitor_group_box = new QGroupBox("monitor");
+    monitor_group_box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     control_layout->addWidget(monitor_group_box);
 
     auto monitor_layout = new QVBoxLayout(monitor_group_box);
 
-    m_monitor_button= new QPushButton("monitor");
+    m_monitor_button = new QPushButton("monitor");
     m_monitor_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_monitor_button->setFixedWidth(80);
     m_monitor_button->setCheckable(true);
-    m_monitor_button->setChecked(true);
+    m_monitor_button->setChecked(false);
     connect(m_monitor_button, &QPushButton::clicked, this, &Widget::ToggleMonitor);
     monitor_layout->addWidget(m_monitor_button);
 
     m_save_image_button = new QPushButton("save image");
     m_save_image_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_save_image_button->setFixedWidth(80);
     connect(m_save_image_button, &QPushButton::clicked, this, &Widget::SaveImage);
     monitor_layout->addWidget(m_save_image_button);
 
-    auto task_status_server_group_box = new QGroupBox("server");
-    control_layout->addWidget(task_status_server_group_box);
+    m_task_status_server_group_box = new QGroupBox("server");
+    m_task_status_server_group_box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    control_layout->addWidget(m_task_status_server_group_box);
 
-    auto task_status_server_layout = new QVBoxLayout(task_status_server_group_box);
+    auto task_status_server_form_layout = new QFormLayout(m_task_status_server_group_box);
 
-    m_task_status_server_button = new QPushButton("server");
-    m_task_status_server_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_status_server_button->setFixedWidth(80);
-    m_task_status_server_button->setCheckable(true);
-    connect(m_task_status_server_button, &QPushButton::clicked, this, &Widget::ToggleTaskStatusServer);
-    task_status_server_layout->addWidget(m_task_status_server_button);
+    auto task_status_server_type_label = new QLabel("type:");
+    m_task_status_server_type_combo_box = new QComboBox();
+    for (int i = static_cast<int>(ServerType::NONE); i <= static_cast<int>(ServerType::HTTP); ++i) {
+        m_task_status_server_type_combo_box->addItem(get_server_type_str(static_cast<ServerType>(i)).c_str());
+    }
+    m_task_status_server_type_combo_box->setCurrentIndex(static_cast<int>(ServerType::NONE));
+    connect(m_task_status_server_type_combo_box, &QComboBox::currentIndexChanged, [this](int index){ m_task_status_server_port_line_edit->setEnabled(index != static_cast<int>(ServerType::NONE)); });
+    task_status_server_form_layout->addRow(task_status_server_type_label, m_task_status_server_type_combo_box);
 
-    auto task_status_server_port_layout = new QHBoxLayout();
-    task_status_server_layout->addLayout(task_status_server_port_layout);
-
-    m_task_status_server_port_label = new QLabel("port:");
-    task_status_server_port_layout->addWidget(m_task_status_server_port_label);
-
-    m_task_status_server_port_line_edit = new QLineEdit("8123");
-    m_task_status_server_port_line_edit->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_status_server_port_line_edit->setFixedWidth(40);
-    task_status_server_port_layout->addWidget(m_task_status_server_port_line_edit);
+    auto task_status_server_port_label = new QLabel("port:");
+    task_status_server_port_label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    m_task_status_server_port_line_edit = new QLineEdit(defaul_task_status_server_port_str.c_str());
+    m_task_status_server_port_line_edit->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
+    m_task_status_server_port_line_edit->setEnabled(false);
+    connect(m_task_status_server_port_line_edit, &QLineEdit::editingFinished, this, &Widget::ValidateTaskStatusServerPort);
+    task_status_server_form_layout->addRow(task_status_server_port_label, m_task_status_server_port_line_edit);
 
     auto transform_group_box = new QGroupBox("transform");
+    transform_group_box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     transform_group_box->setCheckable(true);
     control_layout->addWidget(transform_group_box);
 
@@ -215,49 +211,48 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
 
     m_save_transform_button = new QPushButton("save transform");
     m_save_transform_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_save_transform_button->setFixedWidth(100);
     connect(m_save_transform_button, &QPushButton::clicked, this, &Widget::SaveTransform);
     transform_button_layout->addWidget(m_save_transform_button);
 
     m_load_transform_button = new QPushButton("load transform");
     m_load_transform_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_load_transform_button->setFixedWidth(100);
     connect(m_load_transform_button, &QPushButton::clicked, this, &Widget::LoadTransform);
     transform_button_layout->addWidget(m_load_transform_button);
 
-    auto form_layout1 = new QFormLayout();
-    transform_layout->addLayout(form_layout1);
-    auto form_layout2 = new QFormLayout();
-    transform_layout->addLayout(form_layout2);
+    auto transform_form_layout1 = new QFormLayout();
+    transform_layout->addLayout(transform_form_layout1);
+    auto transform_form_layout2 = new QFormLayout();
+    transform_layout->addLayout(transform_form_layout2);
 
-    m_bbox_label = new QLabel("bbox:");
+    auto bbox_label = new QLabel("bbox:");
     m_bbox_line_edit = new QLineEdit();
     connect(m_bbox_line_edit, &QLineEdit::editingFinished, this, &Widget::TransformChanged);
-    form_layout1->addRow(m_bbox_label, m_bbox_line_edit);
+    transform_form_layout1->addRow(bbox_label, m_bbox_line_edit);
 
-    m_sphere_label = new QLabel("sphere:");
+    auto sphere_label = new QLabel("sphere:");
     m_sphere_line_edit = new QLineEdit();
     connect(m_sphere_line_edit, &QLineEdit::editingFinished, this, &Widget::TransformChanged);
-    form_layout1->addRow(m_sphere_label, m_sphere_line_edit);
+    transform_form_layout1->addRow(sphere_label, m_sphere_line_edit);
 
-    m_filter_level_label = new QLabel("filter_level:");
+    auto filter_level_label = new QLabel("filter_level:");
     m_filter_level_line_edit = new QLineEdit();
     connect(m_filter_level_line_edit, &QLineEdit::editingFinished, this, &Widget::TransformChanged);
-    form_layout1->addRow(m_filter_level_label, m_filter_level_line_edit);
+    transform_form_layout1->addRow(filter_level_label, m_filter_level_line_edit);
 
-    m_binarization_threshold_label = new QLabel("binarization_threshold:");
+    auto binarization_threshold_label = new QLabel("binarization_threshold:");
     m_binarization_threshold_line_edit = new QLineEdit();
     connect(m_binarization_threshold_line_edit, &QLineEdit::editingFinished, this, &Widget::TransformChanged);
-    form_layout2->addRow(m_binarization_threshold_label, m_binarization_threshold_line_edit);
+    transform_form_layout2->addRow(binarization_threshold_label, m_binarization_threshold_line_edit);
 
-    m_pixelization_threshold_label = new QLabel("pixelization_threshold:");
+    auto pixelization_threshold_label = new QLabel("pixelization_threshold:");
     m_pixelization_threshold_line_edit = new QLineEdit();
     connect(m_pixelization_threshold_line_edit, &QLineEdit::editingFinished, this, &Widget::TransformChanged);
-    form_layout2->addRow(m_pixelization_threshold_label, m_pixelization_threshold_line_edit);
+    transform_form_layout2->addRow(pixelization_threshold_label, m_pixelization_threshold_line_edit);
 
     UpdateTransformUI(m_transform);
 
     auto status_group_box = new QGroupBox("status");
+    status_group_box->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     layout->addWidget(status_group_box);
 
     auto status_group_box_layout = new QHBoxLayout(status_group_box);
@@ -265,38 +260,38 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
     auto result_frame = new QFrame();
     result_frame->setFrameStyle(QFrame::Panel | QFrame::Sunken);
     result_frame->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    result_frame->setFixedWidth(50);
     status_group_box_layout->addWidget(result_frame);
 
     auto result_frame_layout = new QHBoxLayout(result_frame);
 
     m_result_label = new QLabel("-");
+    m_result_label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     result_frame_layout->addWidget(m_result_label);
 
     auto status_frame = new QFrame();
     status_frame->setFrameStyle(QFrame::Panel | QFrame::Sunken);
+    status_frame->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     status_group_box_layout->addWidget(status_frame);
 
     auto status_frame_layout = new QHBoxLayout(status_frame);
 
     m_status_label = new QLabel("-");
+    m_status_label->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
     status_frame_layout->addWidget(m_status_label);
 
     m_task_save_part_progress_bar = new QProgressBar();
     m_task_save_part_progress_bar->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_save_part_progress_bar->setFixedWidth(500);
+    m_task_save_part_progress_bar->setFixedWidth(200);
     m_task_save_part_progress_bar->setFormat("%p%");
     m_task_save_part_progress_bar->setRange(0, m_part_num);
     status_group_box_layout->addWidget(m_task_save_part_progress_bar);
-
-    resize(1200, 600);
 }
 
 void Widget::StartCalibration() {
     m_task_button->setEnabled(false);
-    m_clear_calibration_button->setEnabled(false);
     m_save_calibration_button->setEnabled(false);
     m_load_calibration_button->setEnabled(false);
+    m_clear_calibration_button->setEnabled(false);
 
     m_calibration_running = true;
     auto get_transform_fn = [this] {
@@ -326,8 +321,8 @@ void Widget::StopCalibration() {
     m_task_button->setEnabled(true);
     m_load_calibration_button->setEnabled(true);
     if (m_calibration.valid) {
-        m_clear_calibration_button->setEnabled(true);
         m_save_calibration_button->setEnabled(true);
+        m_clear_calibration_button->setEnabled(true);
     }
     ClearStatus();
 }
@@ -341,8 +336,8 @@ void Widget::LoadCalibration() {
     if (std::filesystem::is_regular_file(calibration_path)) {
         m_calibration.Load(calibration_path);
         if (m_calibration.valid) {
-            m_clear_calibration_button->setEnabled(true);
             m_save_calibration_button->setEnabled(true);
+            m_clear_calibration_button->setEnabled(true);
         }
     } else {
         QMessageBox::warning(this, "Warning", std::string("can't find calibration file '" + calibration_path + "'").c_str());
@@ -351,15 +346,16 @@ void Widget::LoadCalibration() {
 
 void Widget::ClearCalibration() {
     m_calibration.valid = false;
-    m_clear_calibration_button->setEnabled(false);
     m_save_calibration_button->setEnabled(false);
+    m_clear_calibration_button->setEnabled(false);
 }
 
 void Widget::StartTask() {
     m_calibrate_button->setEnabled(false);
-    m_clear_calibration_button->setEnabled(false);
     m_save_calibration_button->setEnabled(false);
     m_load_calibration_button->setEnabled(false);
+    m_clear_calibration_button->setEnabled(false);
+    m_task_status_server_group_box->setEnabled(false);
 
     m_task_running = true;
     auto get_transform_fn = [this] {
@@ -383,7 +379,7 @@ void Widget::StartTask() {
     connect(m_auto_transform_thread.get(), &AutoTransformThread::SendAutoTransform, this, &Widget::UpdateAutoTransform);
     m_auto_transform_thread->start();
     auto save_part_worker_fn = [this](ImageDecodeWorker::SavePartProgressCb save_part_progress_cb, ImageDecodeWorker::SavePartCompleteCb save_part_complete_cb, ImageDecodeWorker::SavePartErrorCb save_part_error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb) {
-        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, &m_task_status_server);
+        m_image_decode_worker.SavePartWorker(m_task_running, m_part_q, m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, nullptr, static_cast<ServerType>(m_task_status_server_type_combo_box->currentIndex()), parse_server_port(m_task_status_server_port_line_edit->text().toStdString()));
     };
     m_save_part_thread = std::make_unique<SavePartThread>(this, save_part_worker_fn);
     connect(m_save_part_thread.get(), &SavePartThread::SendSavePartProgress, this, &Widget::ShowTaskSavePartProgress);
@@ -419,9 +415,10 @@ void Widget::StopTask() {
     m_calibrate_button->setEnabled(true);
     m_load_calibration_button->setEnabled(true);
     if (m_calibration.valid) {
-        m_clear_calibration_button->setEnabled(true);
         m_save_calibration_button->setEnabled(true);
+        m_clear_calibration_button->setEnabled(true);
     }
+    m_task_status_server_group_box->setEnabled(true);
     ClearStatus();
 }
 
@@ -457,10 +454,14 @@ void Widget::ClearImages() {
     }
 }
 
-void Widget::ToggleMonitor() {
-    m_monitor_on = !m_monitor_on;
-    if (!m_monitor_on) ClearImages();
-    m_save_image_button->setEnabled(m_monitor_on);
+void Widget::ToggleMonitor(bool checked) {
+    if (checked) {
+        m_image_window->show();
+    } else {
+        m_image_window->hide();
+        ClearImages();
+    }
+    m_save_image_button->setEnabled(checked);
 }
 
 void Widget::SaveImage() {
@@ -476,24 +477,13 @@ void Widget::SaveImage() {
     }
 }
 
-void Widget::ToggleTaskStatusServer() {
-    if (m_task_status_server_on) {
-        m_task_status_server.Stop();
-        m_task_status_server_on = false;
-        m_task_status_server_port_line_edit->setEnabled(true);
-    } else {
-        int port = -1;
-        try {
-            port = parse_task_status_server_port(m_task_status_server_port_line_edit->text().toStdString());
-        }
-        catch (const invalid_image_codec_argument& e) {
-            QMessageBox::warning(this, "Warning", std::string("invalid task status server port '" + m_task_status_server_port_line_edit->text().toStdString() + "'").c_str());
-        }
-        if (port > 0) {
-            m_task_status_server.Start(port);
-            m_task_status_server_on = true;
-            m_task_status_server_port_line_edit->setEnabled(false);
-        }
+void Widget::ValidateTaskStatusServerPort() {
+    try {
+        parse_server_port(m_task_status_server_port_line_edit->text().toStdString());
+    }
+    catch (const invalid_image_codec_argument& e) {
+        QMessageBox::warning(this, "Warning", std::string("invalid task status server port '" + m_task_status_server_port_line_edit->text().toStdString() + "'").c_str());
+        m_task_status_server_port_line_edit->setText(defaul_task_status_server_port_str.c_str());
     }
 }
 
@@ -537,14 +527,14 @@ void Widget::ReceiveCalibration(Calibration calibration) {
 void Widget::ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs) {
     if (m_calibration_running || m_task_running) {
         m_image = img;
-        if (m_monitor_on) {
+        if (m_monitor_button->isChecked()) {
             m_image_label->setPixmap(QPixmap::fromImage(QImage(img.data, img.cols, img.rows, img.cols * img.channels(), QImage::Format_BGR888)));
         }
         for (int tile_y_id = 0; tile_y_id < m_dim.tile_y_num; ++tile_y_id) {
             for (int tile_x_id = 0; tile_x_id < m_dim.tile_x_num; ++tile_x_id) {
                 const auto& result_img = result_imgs[tile_y_id][tile_x_id];
                 m_result_images[tile_y_id][tile_x_id] = result_img;
-                if (m_monitor_on) {
+                if (m_monitor_button->isChecked() && !result_img.empty()) {
                     m_result_image_labels[tile_y_id][tile_x_id]->setPixmap(QPixmap::fromImage(QImage(result_img.data, result_img.cols, result_img.rows, result_img.cols * result_img.channels(), QImage::Format_BGR888)));
                 }
             }
@@ -614,4 +604,5 @@ void Widget::ErrorMsg(std::string msg) {
 void Widget::closeEvent(QCloseEvent* event) {
     if (m_calibration_running) StopCalibration();
     if (m_task_running) StopTask();
+    m_image_window->close();
 }

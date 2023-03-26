@@ -5,6 +5,7 @@
 
 #include "image_stream.h"
 #include "base64.h"
+#include "server_utils.h"
 
 CameraImageStream::CameraImageStream(const std::string& url, int scale) {
     if (url.find("http") == 0) {
@@ -135,8 +136,7 @@ std::unique_ptr<ImageStream> create_image_stream() {
     std::string camera_url("0");
     int scale = 1;
     size_t buffer_size = 64;
-    std::string ip("127.0.0.1");
-    int port = 8123;
+    std::string server("127.0.0.1:80");
     std::ifstream cfg_file("image_stream.ini");
     boost::program_options::options_description desc;
     auto desc_handler = desc.add_options();
@@ -144,11 +144,11 @@ std::unique_ptr<ImageStream> create_image_stream() {
     desc_handler("DEFAULT.camera_url", boost::program_options::value<std::string>(&camera_url));
     desc_handler("DEFAULT.scale", boost::program_options::value<int>(&scale));
     desc_handler("DEFAULT.buffer_size", boost::program_options::value<size_t>(&buffer_size));
-    desc_handler("DEFAULT.ip", boost::program_options::value<std::string>(&ip));
-    desc_handler("DEFAULT.port", boost::program_options::value<int>(&port));
+    desc_handler("DEFAULT.server", boost::program_options::value<std::string>(&server));
     boost::program_options::variables_map vm;
     store(parse_config_file(cfg_file, desc, false), vm);
     notify(vm);
+    auto [ip, port] = parse_server_addr(server);
     std::unique_ptr<ImageStream> image_stream;
     if (stream_type == "camera") {
         image_stream = std::make_unique<CameraImageStream>(camera_url, scale);

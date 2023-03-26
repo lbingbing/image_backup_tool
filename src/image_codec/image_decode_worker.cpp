@@ -7,6 +7,7 @@
 
 #include "image_decode_worker.h"
 #include "image_stream.h"
+#include "image_decode_task_status_server.h"
 
 ImageDecodeWorker::ImageDecodeWorker(SymbolType symbol_type, const Dim& dim) : m_image_decoder(symbol_type, dim) {
 }
@@ -151,7 +152,7 @@ void ImageDecodeWorker::AutoTransformWorker(ThreadSafeQueue<DecodeResult>& part_
     }
 }
 
-void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, TaskStatusServer* task_status_server) {
+void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQueue<DecodeResult>& part_q, std::string output_file, uint32_t part_num, SavePartProgressCb save_part_progress_cb, SavePartFinishCb save_part_finish_cb, SavePartCompleteCb save_part_complete_cb, SavePartErrorCb error_cb, Task::FinalizationStartCb finalization_start_cb, Task::FinalizationProgressCb finalization_progress_cb, Task::FinalizationCompleteCb finalization_complete_cb, ServerType task_status_server_type, int task_status_server_port) {
     auto symbol_type = m_image_decoder.GetSymbolCodec().GetSymbolType();
     auto dim = m_image_decoder.GetDim();
     Task task(output_file);
@@ -190,6 +191,11 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
         }
     }
     task.SetFinalizationCb(finalization_start_cb, finalization_progress_cb, finalization_complete_cb);
+    std::unique_ptr<TaskStatusServer> task_status_server;
+    if (task_status_server_type != ServerType::NONE) {
+        task_status_server = create_task_status_server(task_status_server_type);
+        task_status_server->Start(task_status_server_port);
+    }
     auto t0 = std::chrono::high_resolution_clock::now();
     uint64_t frame_num = 0;
     float fps = 0;
@@ -239,7 +245,7 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
         if ((frame_num & 0x1f) == 0) {
             if (save_part_progress_cb) save_part_progress_cb({frame_num, task.DonePartNum(), part_num, fps, done_fps, bps, left_days, left_hours, left_minutes, left_seconds});
         }
-        if (task_status_server && (task_status_server->NeedUpdateTaskStatus() || (task_status_server->IsRunning() && (frame_num & 0xff) == 0))) {
+        if (task_status_server && (frame_num & 0xff) == 0) {
             task_status_server->UpdateTaskStatus(task.ToTaskBytes());
         }
         if (task.IsDone()) {
@@ -250,6 +256,9 @@ void ImageDecodeWorker::SavePartWorker(std::atomic<bool>& running, ThreadSafeQue
             while (part_q.Pop());
             break;
         }
+    }
+    if (task_status_server) {
+        task_status_server->Stop();
     }
     if (!task.IsDone()) {
         task.Flush();

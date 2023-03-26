@@ -5,6 +5,8 @@ import itertools
 import image_decoder
 import image_stream
 import image_decode_task
+import server_utils
+import image_decode_task_status_server
 
 class CalibrationProgress:
     def __init__(self):
@@ -155,7 +157,7 @@ class ImageDecodeWorker:
                     send_auto_trasform_cb(transform)
             time.sleep(1)
 
-    def save_part_worker(self, running, running_lock, part_q, output_file, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server):
+    def save_part_worker(self, running, running_lock, part_q, output_file, part_num, save_part_progress_cb, save_part_finish_cb, save_part_complete_cb, error_cb, finalization_start_cb, finalization_progress_cb, finalization_complete_cb, task_status_server_type, task_status_server_port):
         symbol_type = self.image_decoder.symbol_codec.symbol_type
         dim = self.image_decoder.dim
         task = image_decode_task.Task(output_file)
@@ -195,6 +197,10 @@ class ImageDecodeWorker:
                         break
                 return
         task.set_finalization_cb(finalization_start_cb, finalization_progress_cb, finalization_complete_cb)
+        task_status_server = None
+        if task_status_server_type != server_utils.ServerType.NONE:
+            task_status_server = image_decode_task_status_server.create_task_status_server(task_status_server_type)
+            task_status_server.start(task_status_server_port)
         t0 = time.time()
         frame_num = 0
         fps = 0
@@ -256,7 +262,7 @@ class ImageDecodeWorker:
                     save_part_progress.left_minutes = left_minutes
                     save_part_progress.left_seconds = left_seconds
                     save_part_progress_cb(save_part_progress)
-            if task_status_server and (task_status_server.is_need_update_task_status() or (task_status_server.is_running() and frame_num & 0x1f == 0)):
+            if task_status_server and frame_num & 0x1f == 0:
                 task_status_server.update_task_status(task.to_task_bytes())
             if task.is_done():
                 if save_part_progress_cb:
@@ -282,6 +288,8 @@ class ImageDecodeWorker:
                     if data is None:
                         break
                 break
+        if task_status_server:
+            task_status_server.stop()
         if not task.is_done():
             task.flush()
         if save_part_finish_cb:

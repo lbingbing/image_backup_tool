@@ -22,6 +22,8 @@ GenPartImageFn2 gen_images(GenPartImageFn1 gen_image_fn, uint32_t part_num) {
 int main(int argc, char** argv) {
     try {
         std::string target_file;
+        std::string symbol_type_str;
+        std::string dim_str;
         int pixel_size = 0;
         int space_size = 0;
         int port = 0;
@@ -29,8 +31,8 @@ int main(int argc, char** argv) {
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
         desc_handler("target_file", boost::program_options::value<std::string>(&target_file), "target file");
-        desc_handler("symbol_type", boost::program_options::value<std::string>(), "symbol type");
-        desc_handler("dim", boost::program_options::value<std::string>(), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
+        desc_handler("symbol_type", boost::program_options::value<std::string>(&symbol_type_str), "symbol type");
+        desc_handler("dim", boost::program_options::value<std::string>(&dim_str), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
         desc_handler("pixel_size", boost::program_options::value<int>(&pixel_size), "pixel size");
         desc_handler("space_size", boost::program_options::value<int>(&space_size), "space size");
         desc_handler("port", boost::program_options::value<int>(&port), "port");
@@ -50,36 +52,11 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("target_file")) {
-            throw std::invalid_argument("target_file not specified");
-        }
+        check_positional_options(p_desc, vm);
+        check_is_file(target_file);
 
-        if (!std::filesystem::is_regular_file(target_file)) {
-            throw std::invalid_argument("target_file '" + target_file + "' is not file");
-        }
-
-        if (!vm.count("symbol_type")) {
-            throw std::invalid_argument("symbol_type not specified");
-        }
-
-        if (!vm.count("dim")) {
-            throw std::invalid_argument("dim not specified");
-        }
-
-        if (!vm.count("pixel_size")) {
-            throw std::invalid_argument("pixel_size not specified");
-        }
-
-        if (!vm.count("space_size")) {
-            throw std::invalid_argument("space_size not specified");
-        }
-
-        if (!vm.count("port")) {
-            throw std::invalid_argument("port not specified");
-        }
-
-        auto symbol_type = parse_symbol_type(vm["symbol_type"].as<std::string>());
-        auto dim = parse_dim(vm["dim"].as<std::string>());
+        auto symbol_type = parse_symbol_type(symbol_type_str);
+        auto dim = parse_dim(dim_str);
         auto res = prepare_part_images(target_file, symbol_type, dim);
         auto symbol_codec = std::move(std::get<0>(res));
         auto part_byte_num = std::get<1>(res);

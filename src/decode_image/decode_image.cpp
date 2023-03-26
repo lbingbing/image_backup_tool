@@ -123,6 +123,8 @@ void scan2(ImageDecoder* image_decoder, const cv::Mat& img, const Transform tran
 int main(int argc, char** argv) {
     try {
         std::string image_file;
+        std::string symbol_type_str;
+        std::string dim_str;
         std::string calibration_file;
         bool save_result_image = false;
         int scan_mode = 0;
@@ -131,8 +133,8 @@ int main(int argc, char** argv) {
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
         desc_handler("image_file", boost::program_options::value<std::string>(&image_file), "image file");
-        desc_handler("symbol_type", boost::program_options::value<std::string>(), "symbol type");
-        desc_handler("dim", boost::program_options::value<std::string>(), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
+        desc_handler("symbol_type", boost::program_options::value<std::string>(&symbol_type_str), "symbol type");
+        desc_handler("dim", boost::program_options::value<std::string>(&dim_str), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
         desc_handler("calibration_file", boost::program_options::value<std::string>(&calibration_file), "calibration file");
         desc_handler("save_result_image", boost::program_options::value<bool>(&save_result_image), "dump result image");
         desc_handler("scan_mode", boost::program_options::value<int>(&scan_mode), "scan mode, 1: bgr; 2: gray");
@@ -151,30 +153,15 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("image_file")) {
-            throw std::invalid_argument("image_file not specified");
-        }
-
-        if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image_file '" + image_file + "' is not file");
-        }
-
-        if (!vm.count("symbol_type")) {
-            throw std::invalid_argument("symbol_type not specified");
-        }
-
-        if (!vm.count("dim")) {
-            throw std::invalid_argument("dim not specified");
-        }
+        check_positional_options(p_desc, vm);
+        check_is_file(image_file);
 
         if (vm.count("calibration_file")) {
-            if (!std::filesystem::is_regular_file(calibration_file)) {
-                throw std::invalid_argument("calibration_file '" + calibration_file + "' is not file");
-            }
+            check_is_file(calibration_file);
         }
 
-        auto dim = parse_dim(vm["dim"].as<std::string>());
-        ImageDecoder image_decoder(parse_symbol_type(vm["symbol_type"].as<std::string>()), dim);
+        auto dim = parse_dim(dim_str);
+        ImageDecoder image_decoder(parse_symbol_type(symbol_type_str), dim);
         Transform transform = get_transform(vm);
         Calibration calibration;
         if (vm.count("calibration_file")) {

@@ -10,6 +10,8 @@ int main(int argc, char** argv) {
     try {
         std::string save_image_dir_path;
         std::string target_file;
+        std::string symbol_type_str;
+        std::string dim_str;
         int pixel_size = 0;
         int space_size = 0;
         boost::program_options::options_description desc("usage");
@@ -17,8 +19,8 @@ int main(int argc, char** argv) {
         desc_handler("help", "help message");
         desc_handler("save_image_dir_path", boost::program_options::value<std::string>(&save_image_dir_path), "save image dir path");
         desc_handler("target_file", boost::program_options::value<std::string>(&target_file), "target file");
-        desc_handler("symbol_type", boost::program_options::value<std::string>(), "symbol type");
-        desc_handler("dim", boost::program_options::value<std::string>(), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
+        desc_handler("symbol_type", boost::program_options::value<std::string>(&symbol_type_str), "symbol type");
+        desc_handler("dim", boost::program_options::value<std::string>(&dim_str), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
         desc_handler("pixel_size", boost::program_options::value<int>(&pixel_size), "pixel size");
         desc_handler("space_size", boost::program_options::value<int>(&space_size), "space size");
         boost::program_options::positional_options_description p_desc;
@@ -37,9 +39,7 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("save_image_dir_path")) {
-            throw std::invalid_argument("save_image_dir_path not specified");
-        }
+        check_positional_options(p_desc, vm);
 
         if (std::filesystem::exists(save_image_dir_path)) {
             if (!std::filesystem::is_directory(save_image_dir_path)) {
@@ -49,32 +49,10 @@ int main(int argc, char** argv) {
             std::filesystem::create_directory(save_image_dir_path);
         }
 
-        if (!vm.count("target_file")) {
-            throw std::invalid_argument("target_file not specified");
-        }
+        check_is_file(target_file);
 
-        if (!std::filesystem::is_regular_file(target_file)) {
-            throw std::invalid_argument("target_file '" + target_file + "' is not file");
-        }
-
-        if (!vm.count("symbol_type")) {
-            throw std::invalid_argument("symbol_type not specified");
-        }
-
-        if (!vm.count("dim")) {
-            throw std::invalid_argument("dim not specified");
-        }
-
-        if (!vm.count("pixel_size")) {
-            throw std::invalid_argument("pixel_size not specified");
-        }
-
-        if (!vm.count("space_size")) {
-            throw std::invalid_argument("space_size not specified");
-        }
-
-        auto symbol_type = parse_symbol_type(vm["symbol_type"].as<std::string>());
-        auto dim = parse_dim(vm["dim"].as<std::string>());
+        auto symbol_type = parse_symbol_type(symbol_type_str);
+        auto dim = parse_dim(dim_str);
         auto res = prepare_part_images(target_file, symbol_type, dim);
         auto symbol_codec = move(std::get<0>(res));
         auto part_byte_num = std::get<1>(res);

@@ -9,6 +9,8 @@ import configparser
 import numpy as np
 import cv2 as cv
 
+import server_utils
+
 class ImageStream:
     def get_frame(self):
         raise NotImplementedError()
@@ -135,8 +137,8 @@ def create_image_stream():
     camera_url = config.get('DEFAULT', 'camera_url', fallback=0)
     scale = config.getint('DEFAULT', 'scale', fallback=1)
     buffer_size = config.getint('DEFAULT', 'buffer_size', fallback=64)
-    ip = config.get('DEFAULT', 'ip', fallback='127.0.0.1')
-    port = config.getint('DEFAULT', 'port', fallback=8123)
+    server = config.get('DEFAULT', 'server', fallback='127.0.0.1:80')
+    ip, port = server_utils.parse_server_addr(server)
     if stream_type == 'camera':
         image_stream = CameraImageStream(camera_url, scale)
     elif stream_type == 'pipe':

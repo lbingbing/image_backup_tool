@@ -5,6 +5,7 @@
 #include <QtWidgets/QFrame>
 #include <QtWidgets/QLabel>
 #include <QtWidgets/QPushButton>
+#include <QtWidgets/QComboBox>
 #include <QtWidgets/QLineEdit>
 #include <QtWidgets/QProgressBar>
 #include <QtWidgets/QProgressDialog>
@@ -98,9 +99,9 @@ private slots:
     void ShowResult(cv::Mat img, bool success, std::vector<std::vector<cv::Mat>> result_imgs);
     void ShowCalibrationProgress(ImageDecodeWorker::CalibrationProgress calibration_progress);
     void ShowTaskSavePartProgress(ImageDecodeWorker::SavePartProgress task_progress);
-    void ToggleMonitor();
+    void ToggleMonitor(bool checked);
     void SaveImage();
-    void ToggleTaskStatusServer();
+    void ValidateTaskStatusServerPort();
     void SaveTransform();
     void LoadTransform();
     void TransformChanged();
@@ -142,33 +143,27 @@ private:
     std::mutex m_transform_mtx;
     std::atomic<bool> m_calibration_running = false;
     std::atomic<bool> m_task_running = false;
-    bool m_monitor_on = true;
-    bool m_task_status_server_on = false;
-    TaskStatusServer m_task_status_server;
+    std::string defaul_task_status_server_port_str{"80"};
 
+    QWidget* m_image_window = nullptr;
     QLabel* m_image_label = nullptr;
     std::vector<std::vector<QLabel*>> m_result_image_labels;
     QPushButton* m_calibrate_button = nullptr;
-    QPushButton* m_clear_calibration_button = nullptr;
     QPushButton* m_save_calibration_button = nullptr;
     QPushButton* m_load_calibration_button = nullptr;
+    QPushButton* m_clear_calibration_button = nullptr;
     QPushButton* m_task_button = nullptr;
     QPushButton* m_monitor_button = nullptr;
     QPushButton* m_save_image_button = nullptr;
-    QPushButton* m_task_status_server_button = nullptr;
-    QLabel* m_task_status_server_port_label = nullptr;
+    QGroupBox* m_task_status_server_group_box = nullptr;
+    QComboBox* m_task_status_server_type_combo_box = nullptr;
     QLineEdit* m_task_status_server_port_line_edit = nullptr;
     QPushButton* m_save_transform_button = nullptr;
     QPushButton* m_load_transform_button = nullptr;
-    QLabel* m_bbox_label = nullptr;
     QLineEdit* m_bbox_line_edit = nullptr;
-    QLabel* m_sphere_label = nullptr;
     QLineEdit* m_sphere_line_edit = nullptr;
-    QLabel* m_filter_level_label = nullptr;
     QLineEdit* m_filter_level_line_edit = nullptr;
-    QLabel* m_binarization_threshold_label = nullptr;
     QLineEdit* m_binarization_threshold_line_edit = nullptr;
-    QLabel* m_pixelization_threshold_label = nullptr;
     QLineEdit* m_pixelization_threshold_line_edit = nullptr;
     QLabel* m_result_label = nullptr;
     QLabel* m_status_label = nullptr;

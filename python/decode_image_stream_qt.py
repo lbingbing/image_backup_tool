@@ -12,10 +12,9 @@ import transform_utils
 import image_decoder
 import image_decode_worker
 import image_decode_task
-import image_decode_task_status_server
+import server_utils
 
 class Widget(QtWidgets.QWidget):
-    task_status_server_start = QtCore.Signal(bool)
     send_calibration = QtCore.Signal(image_decoder.Calibration)
     send_calibration_image_result = QtCore.Signal(object, bool, list)
     send_calibration_progress = QtCore.Signal(image_decode_worker.CalibrationProgress)
@@ -54,11 +53,8 @@ class Widget(QtWidgets.QWidget):
         self.task_running = [False]
         self.running_lock = threading.Lock()
 
-        self.monitor_on = True
-        self.task_status_server_on = False
-        self.task_status_server = image_decode_task_status_server.TaskStatusServer()
+        self.defaul_task_status_server_port_str = '80'
 
-        self.task_status_server_start.connect(self.on_task_status_server_started)
         self.send_calibration.connect(self.receive_calibration)
         self.send_calibration_image_result.connect(self.show_result)
         self.send_calibration_progress.connect(self.show_calibration_progress)
@@ -70,13 +66,10 @@ class Widget(QtWidgets.QWidget):
         self.send_finalization_start.connect(self.task_finalization_start)
         self.send_finalization_progress.connect(self.task_finalization_progress)
 
-        layout = QtWidgets.QVBoxLayout(self)
+        self.image_window = QtWidgets.QWidget()
+        self.image_window.setWindowFlags(QtCore.Qt.WindowTitleHint | QtCore.Qt.WindowMaximizeButtonHint)
 
-        image_layout = QtWidgets.QHBoxLayout()
-        layout.addLayout(image_layout)
-
-        image_w = 600
-        image_h = 400
+        image_layout = QtWidgets.QHBoxLayout(self.image_window)
 
         image_group_box = QtWidgets.QGroupBox('image')
         image_layout.addWidget(image_group_box)
@@ -84,8 +77,7 @@ class Widget(QtWidgets.QWidget):
         image_layout1 = QtWidgets.QHBoxLayout(image_group_box)
 
         self.image_label = QtWidgets.QLabel()
-        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-        self.image_label.setFixedSize(image_w, image_h)
+        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         self.image_label.setScaledContents(True)
         image_layout1.addWidget(self.image_label)
 
@@ -100,23 +92,27 @@ class Widget(QtWidgets.QWidget):
             result_image_layout.addLayout(result_image_layout1)
             for tile_x_id in range(self.tile_x_num):
                 result_image_label = QtWidgets.QLabel()
-                result_image_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Fixed)
-                result_image_label.setFixedSize(round(image_w / self.tile_x_num), round(image_h / self.tile_y_num))
+                result_image_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
                 result_image_label.setScaledContents(True)
                 result_image_layout1.addWidget(result_image_label)
                 self.result_image_labels[tile_y_id][tile_x_id] = result_image_label
 
-        control_layout = QtWidgets.QHBoxLayout()
-        layout.addLayout(control_layout)
+        layout = QtWidgets.QVBoxLayout(self)
+
+        control_frame = QtWidgets.QFrame()
+        control_frame.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        layout.addWidget(control_frame)
+
+        control_layout = QtWidgets.QHBoxLayout(control_frame)
 
         calibration_group_box = QtWidgets.QGroupBox('calibration')
+        calibration_group_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         control_layout.addWidget(calibration_group_box)
 
         calibration_group_box_layout = QtWidgets.QHBoxLayout(calibration_group_box)
 
         self.calibrate_button = QtWidgets.QPushButton('calibrate')
         self.calibrate_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.calibrate_button.setFixedWidth(80)
         self.calibrate_button.setCheckable(True)
         self.calibrate_button.clicked.connect(self.toggle_calibration_start_stop)
         calibration_group_box_layout.addWidget(self.calibrate_button)
@@ -126,79 +122,75 @@ class Widget(QtWidgets.QWidget):
 
         self.save_calibration_button = QtWidgets.QPushButton('save calibration')
         self.save_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.save_calibration_button.setFixedWidth(120)
         self.save_calibration_button.setEnabled(False)
         self.save_calibration_button.clicked.connect(self.save_calibration)
         calibration_button_layout.addWidget(self.save_calibration_button)
 
         self.load_calibration_button = QtWidgets.QPushButton('load calibration')
         self.load_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.load_calibration_button.setFixedWidth(120)
         self.load_calibration_button.clicked.connect(self.load_calibration)
         calibration_button_layout.addWidget(self.load_calibration_button)
 
         self.clear_calibration_button = QtWidgets.QPushButton('clear calibration')
         self.clear_calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.clear_calibration_button.setFixedWidth(120)
         self.clear_calibration_button.setEnabled(False)
         self.clear_calibration_button.clicked.connect(self.clear_calibration)
         calibration_button_layout.addWidget(self.clear_calibration_button)
 
         task_group_box = QtWidgets.QGroupBox('task')
+        task_group_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         control_layout.addWidget(task_group_box)
 
         task_group_box_layout = QtWidgets.QHBoxLayout(task_group_box)
 
         self.task_button = QtWidgets.QPushButton('start')
         self.task_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_button.setFixedWidth(80)
         self.task_button.setCheckable(True)
         self.task_button.clicked.connect(self.toggle_task_start_stop)
         task_group_box_layout.addWidget(self.task_button)
 
         monitor_group_box = QtWidgets.QGroupBox('monitor')
+        monitor_group_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         control_layout.addWidget(monitor_group_box)
 
         monitor_layout = QtWidgets.QVBoxLayout(monitor_group_box)
 
-        self.monitor_button= QtWidgets.QPushButton('monitor')
+        self.monitor_button = QtWidgets.QPushButton('monitor')
         self.monitor_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.monitor_button.setFixedWidth(80)
         self.monitor_button.setCheckable(True)
-        self.monitor_button.setChecked(True)
+        self.monitor_button.setChecked(False)
         self.monitor_button.clicked.connect(self.toggle_monitor)
         monitor_layout.addWidget(self.monitor_button)
 
         self.save_image_button = QtWidgets.QPushButton('save image')
         self.save_image_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.save_image_button.setFixedWidth(80)
         self.save_image_button.clicked.connect(self.save_image)
         monitor_layout.addWidget(self.save_image_button)
 
-        task_status_server_group_box = QtWidgets.QGroupBox('server')
-        control_layout.addWidget(task_status_server_group_box)
+        self.task_status_server_group_box = QtWidgets.QGroupBox('server')
+        self.task_status_server_group_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        control_layout.addWidget(self.task_status_server_group_box)
 
-        task_status_server_layout = QtWidgets.QVBoxLayout(task_status_server_group_box)
+        task_status_server_form_layout = QtWidgets.QFormLayout(self.task_status_server_group_box)
 
-        self.task_status_server_button = QtWidgets.QPushButton('server')
-        self.task_status_server_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_status_server_button.setFixedWidth(80)
-        self.task_status_server_button.setCheckable(True)
-        self.task_status_server_button.clicked.connect(self.toggle_task_status_server)
-        task_status_server_layout.addWidget(self.task_status_server_button)
+        task_status_server_type_label = QtWidgets.QLabel('type:')
+        self.task_status_server_type_combo_box = QtWidgets.QComboBox()
+        for t in server_utils.ServerType:
+            self.task_status_server_type_combo_box.addItem(t.name.lower())
+        self.task_status_server_type_combo_box.setCurrentIndex(server_utils.ServerType.NONE.value)
+        self.task_status_server_type_combo_box.currentIndexChanged.connect(lambda index: self.task_status_server_port_line_edit.setEnabled(index != server_utils.ServerType.NONE.value))
+        task_status_server_form_layout.addRow(task_status_server_type_label, self.task_status_server_type_combo_box)
 
-        task_status_server_port_layout = QtWidgets.QHBoxLayout()
-        task_status_server_layout.addLayout(task_status_server_port_layout)
-
-        self.task_status_server_port_label = QtWidgets.QLabel('port:')
-        task_status_server_port_layout.addWidget(self.task_status_server_port_label)
-
-        self.task_status_server_port_line_edit = QtWidgets.QLineEdit('8123')
-        self.task_status_server_port_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_status_server_port_line_edit.setFixedWidth(40)
-        task_status_server_port_layout.addWidget(self.task_status_server_port_line_edit)
+        task_status_server_port_label = QtWidgets.QLabel('port:')
+        task_status_server_port_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.task_status_server_port_line_edit = QtWidgets.QLineEdit(self.defaul_task_status_server_port_str)
+        self.task_status_server_port_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
+        self.task_status_server_port_line_edit.setEnabled(False)
+        self.task_status_server_port_line_edit.editingFinished.connect(self.validate_task_status_server_port)
+        task_status_server_form_layout.addRow(task_status_server_port_label, self.task_status_server_port_line_edit)
 
         transform_group_box = QtWidgets.QGroupBox('transform')
+        transform_group_box.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         transform_group_box.setCheckable(True)
         control_layout.addWidget(transform_group_box)
 
@@ -209,49 +201,48 @@ class Widget(QtWidgets.QWidget):
 
         self.save_transform_button = QtWidgets.QPushButton('save transform')
         self.save_transform_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.save_transform_button.setFixedWidth(100)
         self.save_transform_button.clicked.connect(self.save_transform)
         transform_button_layout.addWidget(self.save_transform_button)
 
         self.load_transform_button = QtWidgets.QPushButton('load transform')
         self.load_transform_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.load_transform_button.setFixedWidth(100)
         self.load_transform_button.clicked.connect(self.load_transform)
         transform_button_layout.addWidget(self.load_transform_button)
 
-        form_layout1 = QtWidgets.QFormLayout()
-        transform_layout.addLayout(form_layout1)
-        form_layout2 = QtWidgets.QFormLayout()
-        transform_layout.addLayout(form_layout2)
+        transform_form_layout1 = QtWidgets.QFormLayout()
+        transform_layout.addLayout(transform_form_layout1)
+        transform_form_layout2 = QtWidgets.QFormLayout()
+        transform_layout.addLayout(transform_form_layout2)
 
-        self.bbox_label = QtWidgets.QLabel('bbox:')
+        bbox_label = QtWidgets.QLabel('bbox:')
         self.bbox_line_edit = QtWidgets.QLineEdit()
         self.bbox_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(self.bbox_label, self.bbox_line_edit)
+        transform_form_layout1.addRow(bbox_label, self.bbox_line_edit)
 
-        self.sphere_label = QtWidgets.QLabel('sphere:')
+        sphere_label = QtWidgets.QLabel('sphere:')
         self.sphere_line_edit = QtWidgets.QLineEdit()
         self.sphere_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(self.sphere_label, self.sphere_line_edit)
+        transform_form_layout1.addRow(sphere_label, self.sphere_line_edit)
 
-        self.filter_level_label = QtWidgets.QLabel('filter_level:')
+        filter_level_label = QtWidgets.QLabel('filter_level:')
         self.filter_level_line_edit = QtWidgets.QLineEdit()
         self.filter_level_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout1.addRow(self.filter_level_label, self.filter_level_line_edit)
+        transform_form_layout1.addRow(filter_level_label, self.filter_level_line_edit)
 
-        self.binarization_threshold_label = QtWidgets.QLabel('binarization_threshold:')
+        binarization_threshold_label = QtWidgets.QLabel('binarization_threshold:')
         self.binarization_threshold_line_edit = QtWidgets.QLineEdit()
         self.binarization_threshold_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout2.addRow(self.binarization_threshold_label, self.binarization_threshold_line_edit)
+        transform_form_layout2.addRow(binarization_threshold_label, self.binarization_threshold_line_edit)
 
-        self.pixelization_threshold_label = QtWidgets.QLabel('pixelization_threshold:')
+        pixelization_threshold_label = QtWidgets.QLabel('pixelization_threshold:')
         self.pixelization_threshold_line_edit = QtWidgets.QLineEdit()
         self.pixelization_threshold_line_edit.editingFinished.connect(self.transform_changed)
-        form_layout2.addRow(self.pixelization_threshold_label, self.pixelization_threshold_line_edit)
+        transform_form_layout2.addRow(pixelization_threshold_label, self.pixelization_threshold_line_edit)
 
         self.update_transform_ui(self.transform)
 
         status_group_box = QtWidgets.QGroupBox('status')
+        status_group_box.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         layout.addWidget(status_group_box)
 
         status_group_box_layout = QtWidgets.QHBoxLayout(status_group_box)
@@ -259,39 +250,39 @@ class Widget(QtWidgets.QWidget):
         result_frame = QtWidgets.QFrame()
         result_frame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
         result_frame.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        result_frame.setFixedWidth(50)
         status_group_box_layout.addWidget(result_frame)
 
         result_frame_layout = QtWidgets.QHBoxLayout(result_frame)
 
         self.result_label = QtWidgets.QLabel('-')
+        self.result_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         result_frame_layout.addWidget(self.result_label)
 
         status_frame = QtWidgets.QFrame()
         status_frame.setFrameStyle(QtWidgets.QFrame.Panel | QtWidgets.QFrame.Sunken)
+        status_frame.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         status_group_box_layout.addWidget(status_frame)
 
         status_frame_layout = QtWidgets.QHBoxLayout(status_frame)
 
         self.status_label = QtWidgets.QLabel('-')
+        self.status_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
         status_frame_layout.addWidget(self.status_label)
 
         self.task_save_part_progress_bar = QtWidgets.QProgressBar()
         self.task_save_part_progress_bar.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_save_part_progress_bar.setFixedWidth(500)
+        self.task_save_part_progress_bar.setFixedWidth(200)
         self.task_save_part_progress_bar.setFormat('%p%')
         self.task_save_part_progress_bar.setRange(0, self.part_num)
         status_group_box_layout.addWidget(self.task_save_part_progress_bar)
 
         self.task_finalization_progress_dialog = None
 
-        self.resize(1200, 600)
-
     def start_calibration(self):
         self.task_button.setEnabled(False)
-        self.clear_calibration_button.setEnabled(False)
         self.save_calibration_button.setEnabled(False)
         self.load_calibration_button.setEnabled(False)
+        self.clear_calibration_button.setEnabled(False)
 
         with self.running_lock:
             self.calibration_running = [True]
@@ -322,8 +313,8 @@ class Widget(QtWidgets.QWidget):
         self.task_button.setEnabled(True)
         self.load_calibration_button.setEnabled(True)
         if self.calibration.valid:
-            self.clear_calibration_button.setEnabled(True)
             self.save_calibration_button.setEnabled(True)
+            self.clear_calibration_button.setEnabled(True)
         self.clear_status()
 
     def save_calibration(self):
@@ -334,21 +325,22 @@ class Widget(QtWidgets.QWidget):
         if os.path.isfile(calibration_path):
             self.calibration.load(calibration_path)
             if self.calibration.valid:
-                self.clear_calibration_button.setEnabled(True)
                 self.save_calibration_button.setEnabled(True)
+                self.clear_calibration_button.setEnabled(True)
         else:
             QtWidgets.QMessageBox.warning(self, 'Warning', 'can\'t find calibration file \'{}\''.format(calibration_path))
 
     def clear_calibration(self):
         self.calibration.valid = False
-        self.clear_calibration_button.setEnabled(False)
         self.save_calibration_button.setEnabled(False)
+        self.clear_calibration_button.setEnabled(False)
 
     def start_task(self):
         self.calibrate_button.setEnabled(False)
-        self.clear_calibration_button.setEnabled(False)
         self.save_calibration_button.setEnabled(False)
         self.load_calibration_button.setEnabled(False)
+        self.clear_calibration_button.setEnabled(False)
+        self.task_status_server_group_box.setEnabled(False)
 
         with self.running_lock:
             self.task_running[0] = True
@@ -377,7 +369,7 @@ class Widget(QtWidgets.QWidget):
         save_part_error_cb = lambda *args: self.send_save_part_error.emit(*args)
         finalization_start_cb = lambda *args: self.send_finalization_start.emit(*args)
         finalization_progress_cb = lambda *args: self.send_finalization_progress.emit(*args)
-        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, self.task_status_server))
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.task_running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, finalization_start_cb, finalization_progress_cb, None, server_utils.ServerType(self.task_status_server_type_combo_box.currentIndex()), server_utils.parse_server_port(self.task_status_server_port_line_edit.text())))
         self.save_part_thread.start()
 
     def stop_task(self):
@@ -403,8 +395,9 @@ class Widget(QtWidgets.QWidget):
         self.calibrate_button.setEnabled(True)
         self.load_calibration_button.setEnabled(True)
         if self.calibration.valid:
-            self.clear_calibration_button.setEnabled(True)
             self.save_calibration_button.setEnabled(True)
+            self.clear_calibration_button.setEnabled(True)
+        self.task_status_server_group_box.setEnabled(True)
         self.clear_status()
 
     def toggle_calibration_start_stop(self):
@@ -435,11 +428,14 @@ class Widget(QtWidgets.QWidget):
             for e2 in e1:
                 e2.clear()
 
-    def toggle_monitor(self):
-        self.monitor_on = not self.monitor_on
-        if not self.monitor_on:
+    def toggle_monitor(self, checked):
+        if checked:
+            self.image_window.resize(1200, 600)
+            self.image_window.show()
+        else:
+            self.image_window.hide()
             self.clear_images()
-        self.save_image_button.setEnabled(self.monitor_on)
+        self.save_image_button.setEnabled(checked)
 
     def save_image(self):
         if self.image:
@@ -449,30 +445,12 @@ class Widget(QtWidgets.QWidget):
                 if self.result_images[tile_y_id][tile_x_id]:
                     cv.imwrite('{}.result_image_{}_{}.bmp'.format(self.output_file, tile_x_id, tile_y_id), self.result_images[tile_y_id][tile_x_id])
 
-    def toggle_task_status_server(self):
-        self.task_status_server_button.setEnabled(False)
-        if self.task_status_server_on:
-            self.task_status_server.stop()
-            self.task_status_server_on = False
-            self.task_status_server_port_line_edit.setEnabled(True)
-            self.task_status_server_button.setEnabled(True)
-        else:
-            port = None
-            try:
-                port = image_decode_task_status_server.parse_task_status_server_port(self.task_status_server_port_line_edit.text())
-            except image_codec_types.InvalidImageCodecArgument:
-                QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server port \'{}\''.format(self.task_status_server_port_line_edit.text()))
-            if port is not None:
-                server_start_cb = lambda *args: self.task_status_server_start.emit(*args)
-                self.task_status_server_on = True
-                self.task_status_server_port_line_edit.setEnabled(False)
-                self.task_status_server.start(port, server_start_cb)
-
-    def on_task_status_server_started(self, success):
-        if not success:
-            self.toggle_task_status_server()
-            self.task_status_server_button.setChecked(False)
-        self.task_status_server_button.setEnabled(True)
+    def validate_task_status_server_port(self):
+        try:
+            server_utils.parse_server_port(self.task_status_server_port_line_edit.text())
+        except image_codec_types.InvalidImageCodecArgument:
+            QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server port \'{}\''.format(self.task_status_server_port_line_edit.text()))
+            self.task_status_server_port_line_edit.setText(self.defaul_task_status_server_port_str)
 
     def save_transform(self):
         with self.transform_lock:
@@ -507,13 +485,13 @@ class Widget(QtWidgets.QWidget):
             running = self.calibration_running[0] or self.task_running[0]
         if running:
             self.image = img
-            if self.monitor_on:
+            if self.monitor_button.isChecked():
                 self.image_label.setPixmap(QtGui.QPixmap.fromImage(QtGui.QImage(img.data, img.shape[1], img.shape[0], img.shape[1] * img.shape[2], QtGui.QImage.Format_BGR888)))
             for tile_y_id in range(self.tile_y_num):
                 for tile_x_id in range(self.tile_x_num):
                     result_img = result_imgs[tile_y_id][tile_x_id]
                     self.result_images[tile_y_id][tile_x_id] = result_img
-                    if self.monitor_on:
+                    if self.monitor_button.isChecked() and result_img is not None:
                         self.result_image_labels[tile_y_id][tile_x_id].setPixmap(QtGui.QPixmap.fromImage(QtGui.QImage(result_img.data, result_img.shape[1], result_img.shape[0], result_img.shape[1] * result_img.shape[2], QtGui.QImage.Format_BGR888)))
             self.result_label.setText('pass' if success else  'fail')
 
@@ -576,8 +554,7 @@ class Widget(QtWidgets.QWidget):
             self.stop_calibration()
         if task_running:
             self.stop_task()
-        if self.task_status_server.is_running():
-            self.task_status_server.stop()
+        self.image_window.close()
 
 if __name__ == '__main__':
     import argparse

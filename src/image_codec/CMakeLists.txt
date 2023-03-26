@@ -8,6 +8,8 @@ add_library(image_codec SHARED
     image_decoder.cpp
     image_stream.cpp
     part_image_utils.cpp
+    program_option_utils.cpp
+    server_utils.cpp
     symbol_codec.cpp
     symbol_codec_capi.cpp
     transform_utils.cpp

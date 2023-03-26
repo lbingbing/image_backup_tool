@@ -11,6 +11,7 @@ from PySide6 import QtCore, QtWidgets, QtGui
 import image_codec_types
 import symbol_codec
 import image_decode_task
+import server_utils
 import image_decode_task_status_client
 
 class Parameters:
@@ -60,10 +61,9 @@ class CalibrationPage(QtWidgets.QWidget):
 
         layout = QtWidgets.QHBoxLayout(self)
 
-        calibration_button = QtWidgets.QPushButton()
-        calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        calibration_button = QtWidgets.QPushButton('calibrate')
+        calibration_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         calibration_button.setFixedWidth(100)
-        calibration_button.setText('calibrate')
         calibration_button.setCheckable(True)
         calibration_button.clicked.connect(self.toggle_calibration_start_stop)
         layout.addWidget(calibration_button)
@@ -185,10 +185,7 @@ class TaskPage(QtWidgets.QWidget):
         self.raw_bytes = None
         self.part_byte_num = None
         self.part_num = None
-        self.task_status_server_on = False
-        self.task_status_server_pattern = r'(\d+\.\d+\.\d+\.\d+):(\d+)'
         self.task_status_client = None
-        self.task_status_auto_update = False
         self.task_status_auto_update_threshold = 200
         self.undone_part_ids = None
         self.cur_undone_part_id_index = None
@@ -207,10 +204,9 @@ class TaskPage(QtWidgets.QWidget):
 
         layout = QtWidgets.QHBoxLayout(self)
 
-        self.task_button = QtWidgets.QPushButton()
-        self.task_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Expanding)
+        self.task_button = QtWidgets.QPushButton('start')
+        self.task_button.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
         self.task_button.setFixedWidth(100)
-        self.task_button.setText('start')
         self.task_button.setCheckable(True)
         self.task_button.clicked.connect(self.toggle_task_start_stop)
         layout.addWidget(self.task_button)
@@ -326,33 +322,33 @@ class TaskPage(QtWidgets.QWidget):
         task_status_server_layout = QtWidgets.QHBoxLayout()
         task_frame_layout.addLayout(task_status_server_layout)
 
-        task_status_server_checkbox = QtWidgets.QCheckBox('task_status_server')
-        task_status_server_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        task_status_server_checkbox.setFixedWidth(140)
-        task_status_server_checkbox.stateChanged.connect(self.toggle_task_status_server)
-        task_status_server_layout.addWidget(task_status_server_checkbox)
+        task_status_server_type_label = QtWidgets.QLabel('task_status_server_type')
+        task_status_server_type_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
+        task_status_server_layout.addWidget(task_status_server_type_label)
+        self.task_status_server_type_combo_box = QtWidgets.QComboBox()
+        for t in server_utils.ServerType:
+            self.task_status_server_type_combo_box.addItem(t.name.lower())
+        self.task_status_server_type_combo_box.setCurrentIndex(server_utils.ServerType.NONE.value)
+        self.task_status_server_type_combo_box.currentIndexChanged.connect(lambda index: self.task_status_server_frame.setEnabled(index != server_utils.ServerType.NONE.value))
+        task_status_server_layout.addWidget(self.task_status_server_type_combo_box)
 
         self.task_status_server_frame = QtWidgets.QFrame()
         self.task_status_server_frame.setFrameStyle(QtWidgets.QFrame.Box | QtWidgets.QFrame.Sunken)
+        self.task_status_server_frame.setEnabled(False)
         task_status_server_layout.addWidget(self.task_status_server_frame)
 
         task_status_server_frame_layout = QtWidgets.QHBoxLayout(self.task_status_server_frame)
 
         task_status_server_label = QtWidgets.QLabel('server')
         task_status_server_label.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        task_status_server_label.setFixedWidth(50)
         task_status_server_frame_layout.addWidget(task_status_server_label)
-
         self.task_status_server_line_edit = QtWidgets.QLineEdit(self.context.task_status_server)
         self.task_status_server_line_edit.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        self.task_status_server_line_edit.setFixedWidth(140)
         task_status_server_frame_layout.addWidget(self.task_status_server_line_edit)
 
-        task_status_auto_update_checkbox = QtWidgets.QCheckBox('auto_update')
-        task_status_auto_update_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
-        task_status_auto_update_checkbox.setFixedWidth(100)
-        task_status_auto_update_checkbox.stateChanged.connect(self.toggle_task_status_auto_update)
-        task_status_server_frame_layout.addWidget(task_status_auto_update_checkbox)
+        self.task_status_auto_update_checkbox = QtWidgets.QCheckBox('auto_update')
+        self.task_status_auto_update_checkbox.setSizePolicy(QtWidgets.QSizePolicy.Fixed, QtWidgets.QSizePolicy.Preferred)
+        task_status_server_frame_layout.addWidget(self.task_status_auto_update_checkbox)
 
         task_status_server_layout.addStretch(1)
 
@@ -383,7 +379,6 @@ class TaskPage(QtWidgets.QWidget):
         display_config_frame_layout.addWidget(auto_navigate_fps_label)
         self.auto_navigate_fps_value_label = QtWidgets.QLabel('-')
         self.auto_navigate_fps_value_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-        self.auto_navigate_fps_value_label.setFixedWidth(50)
         display_config_frame_layout.addWidget(self.auto_navigate_fps_value_label)
 
         cur_part_id_label = QtWidgets.QLabel('part_id')
@@ -411,26 +406,12 @@ class TaskPage(QtWidgets.QWidget):
             self.target_file_path = file_path[0]
 
     def toggle_task_mode(self, state):
-        if state == QtCore.Qt.Checked:
+        if state == QtCore.Qt.Checked.value:
             self.config_frame.setEnabled(False)
             self.task_file_frame.setEnabled(True)
         else:
             self.config_frame.setEnabled(True)
             self.task_file_frame.setEnabled(False)
-
-    def toggle_task_status_server(self, state):
-        if state == QtCore.Qt.Checked:
-            self.task_status_server_on = True
-            self.task_status_server_frame.setEnabled(False)
-        else:
-            self.task_status_server_on = False
-            self.task_status_server_frame.setEnabled(True)
-
-    def toggle_task_status_auto_update(self, state):
-        if state == QtCore.Qt.Checked:
-            self.task_status_auto_update = True
-        else:
-            self.task_status_auto_update = False
 
     def open_task_file(self):
         file_path = QtWidgets.QFileDialog.getOpenFileName(self, 'Open File', filter='Tasks (*.task)')
@@ -465,12 +446,10 @@ class TaskPage(QtWidgets.QWidget):
                     self.part_num = part_num
                     self.cur_part_id = 0
                     self.undone_part_id_num_label.setText(str(self.part_num))
-                if self.task_status_server_on:
-                    m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
-                    ip = m.group(1)
-                    port = int(m.group(2))
-                    self.task_status_client = image_decode_task_status_client.TaskStatusClient(ip, port)
-                    if self.task_status_auto_update:
+                if self.is_task_status_server_on():
+                    ip, port = server_utils.parse_server_addr(self.task_status_server_line_edit.text())
+                    self.task_status_client = image_decode_task_status_client.create_task_status_client(server_utils.ServerType(self.task_status_server_type_combo_box.currentIndex()), ip, port)
+                    if self.is_task_status_auto_update():
                         self.fetch_task_status()
                 self.task_frame.setEnabled(False)
                 self.display_config_frame.setEnabled(True)
@@ -507,9 +486,10 @@ class TaskPage(QtWidgets.QWidget):
                 valid = False
                 QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid part_byte_num \'{}\''.format(self.part_byte_num))
         if valid:
-            if self.task_status_server_on:
-                m = re.match(self.task_status_server_pattern, self.task_status_server_line_edit.text())
-                if not m:
+            if self.is_task_status_server_on():
+                try:
+                    server_utils.parse_server_addr(self.task_status_server_line_edit.text())
+                except image_codec_types.InvalidImageCodecArgument:
                     valid = False
                     QtWidgets.QMessageBox.warning(self, 'Warning', 'invalid task status server \'{}\''.format(self.task_status_server_line_edit.text()))
         return valid
@@ -551,7 +531,7 @@ class TaskPage(QtWidgets.QWidget):
     def navigate_next_part(self):
         if self.undone_part_ids:
             need_normal_navigate = True
-            if self.task_status_auto_update and len(self.undone_part_ids) > self.task_status_auto_update_threshold and self.cur_undone_part_id_index == len(self.undone_part_ids) - 1:
+            if self.is_task_status_auto_update() and len(self.undone_part_ids) > self.task_status_auto_update_threshold and self.cur_undone_part_id_index == len(self.undone_part_ids) - 1:
                 need_normal_navigate = not self.update_task_status()
             if need_normal_navigate:
                 self.cur_undone_part_id_index = self.cur_undone_part_id_index + 1 if self.cur_undone_part_id_index < len(self.undone_part_ids) - 1 else 0
@@ -559,7 +539,7 @@ class TaskPage(QtWidgets.QWidget):
                 self.cur_part_id_spin_box.setValue(cur_part_id)
         else:
             need_normal_navigate = True
-            if self.task_status_auto_update and self.part_num > self.task_status_auto_update_threshold and self.cur_part_id == self.part_num - 1:
+            if self.is_task_status_auto_update() and self.part_num > self.task_status_auto_update_threshold and self.cur_part_id == self.part_num - 1:
                 need_normal_navigate = not self.update_task_status()
             if need_normal_navigate:
                 cur_part_id = self.cur_part_id + 1 if self.cur_part_id < self.part_num - 1 else 0
@@ -583,6 +563,12 @@ class TaskPage(QtWidgets.QWidget):
             cur_part_id = self.cur_part_id - 1 if self.cur_part_id > 0 else self.part_num - 1
         self.cur_part_id_spin_box.setValue(cur_part_id)
 
+    def is_task_status_server_on(self):
+        return self.task_status_server_type_combo_box.currentIndex() != server_utils.ServerType.NONE.value
+
+    def is_task_status_auto_update(self):
+        return self.task_status_auto_update_checkbox.checkState() == QtCore.Qt.Checked
+
     def fetch_task_status(self):
         task_bytes = self.task_status_client.get_task_status()
         if task_bytes:
@@ -601,7 +587,7 @@ class TaskPage(QtWidgets.QWidget):
             return False
 
     def update_task_status(self):
-        if self.task_status_server_on:
+        if self.is_task_status_server_on():
             self.display_config_frame.setEnabled(False)
             if self.display_mode == DisplayMode.AUTO:
                 self.timer.stop()
@@ -739,14 +725,14 @@ class Widget(QtWidgets.QWidget):
         self.task_page.space_size_spin_box.valueChanged.connect(self.set_space_size)
 
         self.control_tab = QtWidgets.QTabWidget()
-        self.control_tab.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Fixed)
+        self.control_tab.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
         self.control_tab.addTab(self.calibration_page, 'calibration')
         self.control_tab.addTab(self.task_page, 'task')
         layout.addWidget(self.control_tab)
 
         self.canvas = Canvas(self.parameters, self.context)
         self.canvas.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.canvas.setMinimumSize(400, 400)
+        self.canvas.setMinimumSize(300, 300)
         self.canvas.setFocusPolicy(QtCore.Qt.ClickFocus)
         self.canvas.installEventFilter(self)
         layout.addWidget(self.canvas)

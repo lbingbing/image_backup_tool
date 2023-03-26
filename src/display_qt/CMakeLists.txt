@@ -7,14 +7,14 @@ add_library(display_qt_l SHARED
 )
 target_compile_definitions(display_qt_l PRIVATE DISPLAY_QT_EXPORTS ${compile_flags})
 target_include_directories(display_qt_l PRIVATE ${internal_include_dirs} ${external_include_dirs})
-target_link_libraries(display_qt_l PRIVATE Qt6::Core Qt6::Widgets image_codec ${external_libs})
+target_link_libraries(display_qt_l PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui image_codec ${external_libs})
 set_property(TARGET display_qt_l PROPERTY INSTALL_RPATH .)
 
 add_executable(display_qt
     main.cpp
 )
 target_compile_definitions(display_qt PRIVATE ${compile_flags})
-target_link_libraries(display_qt PRIVATE Qt6::Core Qt6::Widgets display_qt_l)
+target_link_libraries(display_qt PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui display_qt_l)
 set_target_properties(display_qt PROPERTIES
     WIN32_EXECUTABLE ON
     MACOSX_BUNDLE ON

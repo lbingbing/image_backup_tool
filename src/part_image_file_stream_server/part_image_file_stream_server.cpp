@@ -51,17 +51,8 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("image_dir_path")) {
-            throw std::invalid_argument("image_dir_path not specified");
-        }
-
-        if (!std::filesystem::is_directory(image_dir_path)) {
-            throw std::invalid_argument("image_dir_path '" + image_dir_path + "' is not dir");
-        }
-
-        if (!vm.count("port")) {
-            throw std::invalid_argument("port not specified");
-        }
+        check_positional_options(p_desc, vm);
+        check_is_dir(image_dir_path);
 
         auto gen_image_fn = gen_images(image_dir_path);
         start_image_stream_server(gen_image_fn, port);

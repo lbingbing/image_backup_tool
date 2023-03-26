@@ -23,14 +23,26 @@ def test_test_symbol_codec_python_c():
 def test_test_thread_safe_queue():
     assert run(['test_thread_safe_queue'])
 
+def test_test_image_decode_task_status_tcp_server_client_p():
+    assert run(['python', 'test_image_decode_task_status_server_client.py', 'tcp', '80', '8192'])
+
+def test_test_image_decode_task_status_tcp_server_client_c():
+    assert run(['test_image_decode_task_status_server_client', 'tcp', '80', '8192'])
+
+def test_test_image_decode_task_status_http_server_client_p():
+    assert run(['python', 'test_image_decode_task_status_server_client.py', 'http', '80', '8192'])
+
+def test_test_image_decode_task_status_http_server_client_c():
+    assert run(['test_image_decode_task_status_server_client', 'http', '80', '8192'])
+
 def test_test_image_codec_p2p():
-    assert run(['python', 'test_image_codec.py', 'p2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'p2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '80'], timeout=60)
 
 def test_test_image_codec_c2c():
-    assert run(['python', 'test_image_codec.py', 'c2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'c2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '80'], timeout=60)
 
 def test_test_image_codec_p2c():
-    assert run(['python', 'test_image_codec.py', 'p2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'p2c', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '80'], timeout=60)
 
 def test_test_image_codec_c2p():
-    assert run(['python', 'test_image_codec.py', 'c2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '9123'], timeout=60)
+    assert run(['python', 'test_image_codec.py', 'c2p', 'test_target_file', '256', 'symbol2', '1,1,10,10', '10', '10', '80'], timeout=60)

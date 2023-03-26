@@ -6,6 +6,7 @@ set(file_to_install
     display_qt.ini
     display_qt.py
     display_qt_c.py
+    fetch_image_decode_task_status.py
     image_codec_types.py
     image_decode_task.py
     image_decode_task_status_client.py
@@ -20,9 +21,11 @@ set(file_to_install
     part_image_stream_server.py
     part_image_utils.py
     runtime_utils.py
+    server_utils.py
     symbol_codec.py
     symbol_codec_c.py
     test_image_codec.py
+    test_image_decode_task_status_server_client.py
     test_symbol_codec.py
     test_symbol_codec_python_c.py
     transform_utils.py

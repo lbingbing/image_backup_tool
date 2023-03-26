@@ -30,7 +30,7 @@ public:
     IMAGE_CODEC_API void Flush();
     IMAGE_CODEC_API bool IsDone() const;
     IMAGE_CODEC_API void Finalize();
-    IMAGE_CODEC_API void Print(int64_t show_undone_part_num) const;
+    IMAGE_CODEC_API void Print(uint32_t show_undone_part_num) const;
 
     IMAGE_CODEC_API uint32_t DonePartNum() const { return m_done_part_num; }
     IMAGE_CODEC_API const std::string& TaskPath() const { return m_task_path; }

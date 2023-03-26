@@ -9,11 +9,12 @@
 int main(int argc, char** argv) {
     try {
         std::string image_file;
+        std::string dim_str;
         boost::program_options::options_description desc("usage");
         auto desc_handler = desc.add_options();
         desc_handler("help", "help message");
         desc_handler("image_file", boost::program_options::value<std::string>(&image_file), "image file");
-        desc_handler("dim", boost::program_options::value<std::string>(), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
+        desc_handler("dim", boost::program_options::value<std::string>(&dim_str), "dim as tile_x_num,tile_y_num,tile_x_size,tile_y_size");
         add_transform_options(desc_handler);
         boost::program_options::positional_options_description p_desc;
         p_desc.add("image_file", 1);
@@ -27,19 +28,10 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("image_file")) {
-            throw std::invalid_argument("image_file not specified");
-        }
+        check_positional_options(p_desc, vm);
+        check_is_file(image_file);
 
-        if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image_file '" + image_file + "' is not file");
-        }
-
-        if (!vm.count("dim")) {
-            throw std::invalid_argument("dim not specified");
-        }
-
-        auto dim = parse_dim(vm["dim"].as<std::string>());
+        auto dim = parse_dim(dim_str);
         Transform transform = get_transform(vm);
 
         cv::Mat img = cv::imread(image_file, cv::IMREAD_COLOR);

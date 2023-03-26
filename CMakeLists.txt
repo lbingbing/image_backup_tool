@@ -20,10 +20,10 @@ set(Boost_USE_STATIC_LIBS ON)
 find_package(Boost REQUIRED COMPONENTS program_options PATHS ${boost_dir} NO_DEFAULT_PATH)
 set(OpenCV_STATIC ON)
 find_package(OpenCV REQUIRED PATHS ${opencv_dir} NO_DEFAULT_PATH)
-find_package(Qt6 REQUIRED COMPONENTS Core Widgets PATHS ${qt_dir} NO_DEFAULT_PATH)
+find_package(Qt6 REQUIRED COMPONENTS Core Widgets Gui PATHS ${qt_dir} NO_DEFAULT_PATH)
 
 set(external_include_dirs
-    ${Boost_INCLUDE_DIR}
+    ${Boost_INCLUDE_DIRS}
     ${OpenCV_INCLUDE_DIRS}
 )
 
@@ -31,14 +31,6 @@ set(external_libs
     ${Boost_LIBRARIES}
     ${OpenCV_LIBS}
 )
-
-if(WIN32)
-    set(external_binaries
-        "${qt_dir}/bin/Qt6Core.dll"
-        "${qt_dir}/bin/Qt6Gui.dll"
-        "${qt_dir}/bin/Qt6Widgets.dll"
-    )
-endif()
 
 set(internal_include_dirs ${CMAKE_SOURCE_DIR}/src/image_codec)
 
@@ -66,20 +58,20 @@ add_subdirectory(src/decode_image)
 add_subdirectory(src/decode_image_stream)
 add_subdirectory(src/decode_image_stream_qt)
 add_subdirectory(src/display_qt)
+add_subdirectory(src/fetch_image_decode_task_status)
 add_subdirectory(src/image_codec)
 add_subdirectory(src/parse_image_decode_task)
 add_subdirectory(src/part_image_file_gen)
 add_subdirectory(src/part_image_file_stream_server)
 add_subdirectory(src/part_image_stream_server)
 add_subdirectory(src/test_calibration)
-add_subdirectory(src/test_image_decode_task_status_client)
-add_subdirectory(src/test_image_decode_task_status_server)
+add_subdirectory(src/test_image_decode_task_status_server_client)
 add_subdirectory(src/test_image_stream)
 add_subdirectory(src/test_symbol_codec)
 add_subdirectory(src/test_thread_safe_queue)
 add_subdirectory(src/test_transform_utils)
 
 if(WIN32)
-    install(FILES ${external_binaries} DESTINATION ${release_dir})
+    install(IMPORTED_RUNTIME_ARTIFACTS Qt6::Core Qt6::Widgets Qt6::Gui DESTINATION ${release_dir})
     install(DIRECTORY ${qt_dir}/plugins/platforms DESTINATION ${release_dir})
 endif()

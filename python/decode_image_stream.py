@@ -7,6 +7,7 @@ import symbol_codec
 import transform_utils
 import image_decoder
 import image_decode_worker
+import server_utils
 
 class App:
     def __init__(self, output_file, symbol_type, dim, part_num, mp, transform):
@@ -73,7 +74,7 @@ class App:
             print('error')
             print(msg)
 
-        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, None, None, None, None))
+        self.save_part_thread = threading.Thread(target=self.image_decode_worker.save_part_worker, args=(self.running, self.running_lock, self.part_q, self.output_file, self.part_num, save_part_progress_cb, None, save_part_complete_cb, save_part_error_cb, None, None, None, server_utils.ServerType.NONE, 0))
         self.save_part_thread.start()
 
     def stop(self):

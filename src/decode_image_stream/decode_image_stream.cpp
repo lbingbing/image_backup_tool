@@ -51,7 +51,7 @@ public:
             std::cout << "error\n";
             std::cout << msg << "\n";
         };
-        m_save_part_thread = std::make_unique<std::thread>(&ImageDecodeWorker::SavePartWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_part_q), m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, nullptr, nullptr, nullptr, nullptr);
+        m_save_part_thread = std::make_unique<std::thread>(&ImageDecodeWorker::SavePartWorker, &m_image_decode_worker, std::ref(m_running), std::ref(m_part_q), m_output_file, m_part_num, save_part_progress_cb, nullptr, save_part_complete_cb, save_part_error_cb, nullptr, nullptr, nullptr, ServerType::NONE, 0);
     }
 
     void Stop() {
@@ -122,24 +122,10 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("output_file")) {
-            throw std::invalid_argument("output_file not specified");
-        }
-
-        if (!vm.count("symbol_type")) {
-            throw std::invalid_argument("symbol_type not specified");
-        }
-
-        if (!vm.count("dim")) {
-            throw std::invalid_argument("dim not specified");
-        }
-
-        if (!vm.count("part_num")) {
-            throw std::invalid_argument("part_num not specified");
-        }
+        check_positional_options(p_desc, vm);
 
         auto symbol_type = parse_symbol_type(symbol_type_str);
-        auto dim = parse_dim(vm["dim"].as<std::string>());
+        auto dim = parse_dim(dim_str);
         Transform transform = get_transform(vm);
         App app(output_file, symbol_type, dim, part_num, mp, transform);
         std::cout << "start\n";

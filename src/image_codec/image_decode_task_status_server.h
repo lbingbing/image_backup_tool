@@ -7,26 +7,42 @@
 
 #include "image_codec_api.h"
 #include "image_codec_types.h"
-
-IMAGE_CODEC_API int parse_task_status_server_port(const std::string& task_status_server_port_str);
+#include "server_utils.h"
 
 class TaskStatusServer {
 public:
-    IMAGE_CODEC_API ~TaskStatusServer();
+    IMAGE_CODEC_API virtual ~TaskStatusServer() {}
     IMAGE_CODEC_API void Start(int port);
     IMAGE_CODEC_API void Stop();
     IMAGE_CODEC_API void UpdateTaskStatus(const Bytes& task_bytes);
-    IMAGE_CODEC_API bool IsRunning() const { return m_running; }
-    IMAGE_CODEC_API bool NeedUpdateTaskStatus() { return m_need_update_task_status; }
+
+protected:
+    int GetPort() const { return m_port; };
+    Bytes GetTaskBytes() const;
 
 private:
     void Worker();
+    virtual void HandleRequest() = 0;
+    virtual void RequestSelf() = 0;
 
     int m_port = 0;
 
     std::thread m_thread;
     std::atomic<bool> m_running = false;
-    std::atomic<bool> m_need_update_task_status = false;
     Bytes m_task_bytes;
-    std::mutex m_mtx;
+    mutable std::mutex m_mtx;
 };
+
+class TaskStatusTcpServer : public TaskStatusServer {
+private:
+    void HandleRequest() override;
+    void RequestSelf() override;
+};
+
+class TaskStatusHttpServer : public TaskStatusServer {
+private:
+    void HandleRequest() override;
+    void RequestSelf() override;
+};
+
+IMAGE_CODEC_API std::unique_ptr<TaskStatusServer> create_task_status_server(ServerType server_type);

@@ -116,7 +116,7 @@ void Task::Finalize() {
     if (m_finalization_complete_cb) m_finalization_complete_cb();
 }
 
-void Task::Print(int64_t show_undone_part_num) const {
+void Task::Print(uint32_t show_undone_part_num) const {
     std::cout << "symbol_type=" << get_symbol_type_str(m_symbol_type) << "\n";
     std::cout << "dim=" << m_dim << "\n";
     std::cout << "part_num=" << m_part_num << "\n";

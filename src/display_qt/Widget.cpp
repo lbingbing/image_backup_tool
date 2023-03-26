@@ -20,7 +20,7 @@ CalibrationPage::CalibrationPage(QWidget* parent, const Parameters& parameters, 
     auto layout = new QHBoxLayout(this);
 
     auto calibration_button = new QPushButton("calibrate");
-    calibration_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    calibration_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     calibration_button->setFixedWidth(100);
     calibration_button->setCheckable(true);
     connect(calibration_button, &QPushButton::clicked, this, &CalibrationPage::ToggleCalibrationStartStop);
@@ -45,7 +45,7 @@ CalibrationPage::CalibrationPage(QWidget* parent, const Parameters& parameters, 
     symbol_type_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     config_frame_layout->addWidget(symbol_type_label);
     m_symbol_type_combo_box = new QComboBox();
-    for (int i = static_cast<int>(SymbolType::SYMBOL1); i < static_cast<int>(SymbolType::SYMBOL3); ++i) {
+    for (int i = static_cast<int>(SymbolType::SYMBOL1); i <= static_cast<int>(SymbolType::SYMBOL3); ++i) {
         m_symbol_type_combo_box->addItem(get_symbol_type_str(static_cast<SymbolType>(i)).c_str());
     }
     m_symbol_type_combo_box->setCurrentIndex(static_cast<int>(m_context.symbol_type));
@@ -141,7 +141,7 @@ TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& conte
     auto layout = new QHBoxLayout(this);
 
     m_task_button = new QPushButton("start");
-    m_task_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    m_task_button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
     m_task_button->setFixedWidth(100);
     m_task_button->setCheckable(true);
     connect(m_task_button, &QPushButton::clicked, this, &TaskPage::ToggleTaskStartStop);
@@ -187,7 +187,7 @@ TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& conte
     symbol_type_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     config_frame_layout->addWidget(symbol_type_label);
     m_symbol_type_combo_box = new QComboBox();
-    for (int i = static_cast<int>(SymbolType::SYMBOL1); i < static_cast<int>(SymbolType::SYMBOL3); ++i) {
+    for (int i = static_cast<int>(SymbolType::SYMBOL1); i <= static_cast<int>(SymbolType::SYMBOL3); ++i) {
         m_symbol_type_combo_box->addItem(get_symbol_type_str(static_cast<SymbolType>(i)).c_str());
     }
     m_symbol_type_combo_box->setCurrentIndex(static_cast<int>(m_context.symbol_type));
@@ -259,33 +259,34 @@ TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& conte
     auto task_status_server_layout = new QHBoxLayout();
     task_frame_layout->addLayout(task_status_server_layout);
 
-    auto task_status_server_checkbox = new QCheckBox("task_status_server");
-    task_status_server_checkbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    task_status_server_checkbox->setFixedWidth(140);
-    connect(task_status_server_checkbox, &QCheckBox::stateChanged, this, &TaskPage::ToggleTaskStatusServer);
-    task_status_server_layout->addWidget(task_status_server_checkbox);
+    auto task_status_server_type_label = new QLabel("task_status_server_type");
+    task_status_server_type_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    task_status_server_layout->addWidget(task_status_server_type_label);
+    m_task_status_server_type_combo_box = new QComboBox();
+    for (int i = static_cast<int>(ServerType::NONE); i <= static_cast<int>(ServerType::HTTP); ++i) {
+        m_task_status_server_type_combo_box->addItem(get_server_type_str(static_cast<ServerType>(i)).c_str());
+    }
+    m_task_status_server_type_combo_box->setCurrentIndex(static_cast<int>(ServerType::NONE));
+    connect(m_task_status_server_type_combo_box, &QComboBox::currentIndexChanged, [this](int index){ m_task_status_server_frame->setEnabled(index != static_cast<int>(ServerType::NONE)); });
+    task_status_server_layout->addWidget(m_task_status_server_type_combo_box);
 
     m_task_status_server_frame = new QFrame();
     m_task_status_server_frame->setFrameStyle(QFrame::Box | QFrame::Sunken);
+    m_task_status_server_frame->setEnabled(false);
     task_status_server_layout->addWidget(m_task_status_server_frame);
 
     auto task_status_server_frame_layout = new QHBoxLayout(m_task_status_server_frame);
 
     auto task_status_server_label = new QLabel("server");
     task_status_server_label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    task_status_server_label->setFixedWidth(50);
     task_status_server_frame_layout->addWidget(task_status_server_label);
-
     m_task_status_server_line_edit = new QLineEdit(m_context.task_status_server.c_str());
     m_task_status_server_line_edit->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    m_task_status_server_line_edit->setFixedWidth(140);
     task_status_server_frame_layout->addWidget(m_task_status_server_line_edit);
 
-    auto task_status_auto_update_checkbox = new QCheckBox("auto_update");
-    task_status_auto_update_checkbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
-    task_status_auto_update_checkbox->setFixedWidth(100);
-    connect(task_status_auto_update_checkbox, &QCheckBox::stateChanged, this, &TaskPage::ToggleTaskStatusAutoUpdate);
-    task_status_server_frame_layout->addWidget(task_status_auto_update_checkbox);
+    m_task_status_auto_update_checkbox = new QCheckBox("auto_update");
+    m_task_status_auto_update_checkbox->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Preferred);
+    task_status_server_frame_layout->addWidget(m_task_status_auto_update_checkbox);
 
     task_status_server_layout->addStretch(1);
 
@@ -315,7 +316,6 @@ TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& conte
     display_config_frame_layout->addWidget(auto_navigate_fps_label);
     m_auto_navigate_fps_value_label = new QLabel("-");
     m_auto_navigate_fps_value_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    m_auto_navigate_fps_value_label->setFixedWidth(50);
     display_config_frame_layout->addWidget(m_auto_navigate_fps_value_label);
 
     auto cur_part_id_label = new QLabel("part_id");
@@ -352,24 +352,6 @@ void TaskPage::ToggleTaskMode(int state) {
     } else {
         m_config_frame->setEnabled(true);
         m_task_file_frame->setEnabled(false);
-    }
-}
-
-void TaskPage::ToggleTaskStatusServer(int state) {
-    if (state == Qt::Checked) {
-        m_task_status_server_on = true;
-        m_task_status_server_frame->setEnabled(false);
-    } else {
-        m_task_status_server_on = false;
-        m_task_status_server_frame->setEnabled(true);
-    }
-}
-
-void TaskPage::ToggleTaskStatusAutoUpdate(int state) {
-    if (state == Qt::Checked) {
-        m_task_status_auto_update = true;
-    } else {
-        m_task_status_auto_update = false;
     }
 }
 
@@ -416,15 +398,10 @@ void TaskPage::ToggleTaskStartStop() {
                 m_cur_part_id = 0;
                 m_undone_part_id_num_label->setText(std::to_string(m_part_num).c_str());
             }
-            if (m_task_status_server_on) {
-                auto task_status_server_text = m_task_status_server_line_edit->text().toStdString();
-                std::smatch match;
-                bool success = std::regex_match(task_status_server_text, match, m_task_status_server_pattern);
-                assert(success);
-                auto ip = match[1].str();
-                auto port = std::stoi(match[2].str());
-                m_task_status_client = std::make_unique<TaskStatusClient>(ip, port);
-                if (m_task_status_auto_update) {
+            if (IsTaskStatusServerOn()) {
+                auto [ip, port] = parse_server_addr(m_task_status_server_line_edit->text().toStdString());
+                m_task_status_client = create_task_status_client(static_cast<ServerType>(m_task_status_server_type_combo_box->currentIndex()), ip, port);
+                if (IsTaskStatusAutoUpdate()) {
                     FetchTaskStatus();
                 }
             }
@@ -471,11 +448,11 @@ bool TaskPage::ValidateConfig() {
         }
     }
     if (valid) {
-        if (m_task_status_server_on) {
-            auto task_status_server_text = m_task_status_server_line_edit->text().toStdString();
-            std::smatch match;
-            bool success = std::regex_match(task_status_server_text, match, m_task_status_server_pattern);
-            if (!success) {
+        if (IsTaskStatusServerOn()) {
+            try {
+                parse_server_addr(m_task_status_server_line_edit->text().toStdString());
+            }
+            catch (const invalid_image_codec_argument& e) {
                 valid = false;
                 QMessageBox::warning(this, "Warning", std::string("invalid task status server '" + m_task_status_server_line_edit->text().toStdString() + "'").c_str());
             }
@@ -524,7 +501,7 @@ void TaskPage::Draw(uint32_t part_id) {
 void TaskPage::NavigateNextPart() {
     if (!m_undone_part_ids.empty()) {
         bool need_normal_navigate = true;
-        if (m_task_status_auto_update && m_undone_part_ids.size() > m_task_status_auto_update_threshold && m_cur_undone_part_id_index == m_undone_part_ids.size() - 1) {
+        if (IsTaskStatusAutoUpdate() && m_undone_part_ids.size() > m_task_status_auto_update_threshold && m_cur_undone_part_id_index == m_undone_part_ids.size() - 1) {
             need_normal_navigate = !UpdateTaskStatus();
         }
         if (need_normal_navigate) {
@@ -534,7 +511,7 @@ void TaskPage::NavigateNextPart() {
         }
     } else {
         bool need_normal_navigate = true;
-        if (m_task_status_auto_update && m_part_num > m_task_status_auto_update_threshold && m_cur_part_id == m_part_num - 1) {
+        if (IsTaskStatusAutoUpdate() && m_part_num > m_task_status_auto_update_threshold && m_cur_part_id == m_part_num - 1) {
             need_normal_navigate = !UpdateTaskStatus();
         }
         if (need_normal_navigate) {
@@ -569,6 +546,14 @@ void TaskPage::NavigatePrevPart() {
     m_cur_part_id_spin_box->setValue(cur_part_id);
 }
 
+bool TaskPage::IsTaskStatusServerOn() {
+    return m_task_status_server_type_combo_box->currentIndex() != static_cast<int>(ServerType::NONE);
+}
+
+bool TaskPage::IsTaskStatusAutoUpdate() {
+    return m_task_status_auto_update_checkbox->checkState() == Qt::Checked;
+}
+
 bool TaskPage::FetchTaskStatus() {
     Bytes task_bytes = m_task_status_client->GetTaskStatus();
     if (!task_bytes.empty()) {
@@ -597,7 +582,7 @@ bool TaskPage::FetchTaskStatus() {
 }
 
 bool TaskPage::UpdateTaskStatus() {
-    if (m_task_status_server_on) {
+    if (IsTaskStatusServerOn()) {
         m_display_config_frame->setEnabled(false);
         if (m_display_mode == DisplayMode::AUTO) {
             m_timer.stop();
@@ -740,14 +725,14 @@ Widget::Widget(QWidget* parent) : QWidget(parent) {
     connect(m_task_page->m_space_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetSpaceSize);
 
     m_control_tab = new QTabWidget();
-    m_control_tab->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    m_control_tab->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
     m_control_tab->addTab(m_calibration_page, "calibration");
     m_control_tab->addTab(m_task_page, "task");
     layout->addWidget(m_control_tab);
 
     m_canvas = new Canvas(nullptr, m_parameters, m_context);
     m_canvas->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
-    m_canvas->setMinimumSize(400, 400);
+    m_canvas->setMinimumSize(300, 300);
     m_canvas->setFocusPolicy(Qt::ClickFocus);
     m_canvas->installEventFilter(this);
     layout->addWidget(m_canvas);

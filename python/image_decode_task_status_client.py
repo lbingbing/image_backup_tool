@@ -1,5 +1,8 @@
-import socket
 import struct
+import socket
+import http.client
+
+import server_utils
 
 class TaskStatusClient:
     def __init__(self, ip, port):
@@ -7,9 +10,16 @@ class TaskStatusClient:
         self.port = port
 
     def get_task_status(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            s.settimeout(5)
-            try:
+        raise NotImplementedError()
+
+class TaskStatusTcpClient(TaskStatusClient):
+    def __init__(self, ip, port):
+        super().__init__(ip, port)
+
+    def get_task_status(self):
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(5)
                 s.connect((self.ip, self.port))
                 len_bytes = bytearray()
                 while len(len_bytes) < 8:
@@ -20,22 +30,27 @@ class TaskStatusClient:
                     while len(task_bytes) < task_byte_len:
                         task_bytes += s.recv(task_byte_len - len(task_bytes))
                 return task_bytes
-            except Exception as e:
-                return None
+        except Exception as e:
+            return None
 
-if __name__ == '__main__':
-    import argparse
+class TaskStatusHttpClient(TaskStatusClient):
+    def __init__(self, ip, port):
+        super().__init__(ip, port)
 
-    parser = argparse.ArgumentParser()
-    parser.add_argument('target_file_path', help='target file path')
-    parser.add_argument('ip', help='ip')
-    parser.add_argument('port', type=int, help='port')
-    args = parser.parse_args()
+    def get_task_status(self):
+        try:
+            conn = http.client.HTTPConnection(self.ip, self.port)
+            conn.request('GET', '/')
+            resp = conn.getresponse()
+            task_bytes = resp.read(int(resp.getheader('Content-Length')))
+            return task_bytes
+        except Exception as e:
+            return None
 
-    task_status_client = TaskStatusClient(args.ip, args.port)
-    task_bytes = task_status_client.get_task_status()
-    if task_bytes is None:
-        print('fail to get task status')
-    else:
-        with open(args.target_file_path+'.task', 'wb') as f:
-            f.write(task_bytes)
+server_type_to_client_mapping = {
+    server_utils.ServerType.TCP: TaskStatusTcpClient,
+    server_utils.ServerType.HTTP: TaskStatusHttpClient,
+    }
+
+def create_task_status_client(server_type, ip, port):
+    return server_type_to_client_mapping[server_type](ip, port)

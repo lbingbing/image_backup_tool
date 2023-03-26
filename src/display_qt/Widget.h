@@ -1,7 +1,6 @@
 #pragma once
 
 #include <array>
-#include <regex>
 #include <chrono>
 
 #include <QtWidgets/QWidget>
@@ -114,14 +113,14 @@ private slots:
     void ToggleTaskMode(int state);
     void OpenTaskFile();
     void ToggleTaskStartStop();
-    void ToggleTaskStatusServer(int state);
-    void ToggleTaskStatusAutoUpdate(int state);
     void SetInterval(int interval);
     void NavigatePart(uint32_t part_id);
 
 private:
     bool ValidateConfig();
     void Draw(uint32_t part_id);
+    bool IsTaskStatusServerOn();
+    bool IsTaskStatusAutoUpdate();
     bool FetchTaskStatus();
 
     const Parameters& m_parameters;
@@ -131,10 +130,7 @@ private:
     Bytes m_raw_bytes;
     int m_part_byte_num = 0;
     uint32_t m_part_num = 0;
-    bool m_task_status_server_on = false;
-    std::regex m_task_status_server_pattern{"(\\d+\\.\\d+\\.\\d+\\.\\d+):(\\d+)"};
     std::unique_ptr<TaskStatusClient> m_task_status_client;
-    bool m_task_status_auto_update = false;
     size_t m_task_status_auto_update_threshold = 200;
     std::vector<uint32_t> m_undone_part_ids;
     size_t m_cur_undone_part_id_index = 0;
@@ -157,8 +153,10 @@ private:
     QFrame* m_config_frame = nullptr;
     QFrame* m_task_file_frame = nullptr;
     QLineEdit* m_task_file_line_edit = nullptr;
+    QComboBox* m_task_status_server_type_combo_box = nullptr;
     QFrame* m_task_status_server_frame = nullptr;
     QLineEdit* m_task_status_server_line_edit = nullptr;
+    QCheckBox* m_task_status_auto_update_checkbox = nullptr;
     QFrame* m_display_config_frame = nullptr;
     QPushButton* m_display_mode_button = nullptr;
     QSpinBox* m_interval_spin_box = nullptr;

@@ -32,13 +32,8 @@ int main(int argc, char** argv) {
             return 1;
         }
 
-        if (!vm.count("image_file")) {
-            throw std::invalid_argument("image_file not specified");
-        }
-
-        if (!std::filesystem::is_regular_file(image_file)) {
-            throw std::invalid_argument("image_file '" + image_file + "' is not file");
-        }
+        check_positional_options(p_desc, vm);
+        check_is_file(image_file);
 
         Transform transform = get_transform(vm);
         std::cout << transform << "\n";
