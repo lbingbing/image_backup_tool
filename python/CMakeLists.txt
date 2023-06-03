@@ -2,6 +2,7 @@ set(file_to_install
     clib_utils.py
     decode_image_stream.py
     decode_image_stream_qt.py
+    decode_image_stream_qt_c.py
     display_curses.py
     display_qt.ini
     display_qt.py

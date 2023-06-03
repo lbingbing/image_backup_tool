@@ -83,7 +83,7 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
     auto image_layout1 = new QHBoxLayout(image_group_box);
 
     m_image_label = new QLabel();
-    m_image_label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    m_image_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
     m_image_label->setScaledContents(true);
     image_layout1->addWidget(m_image_label);
 
@@ -99,7 +99,7 @@ Widget::Widget(QWidget* parent, const std::string& output_file, SymbolType symbo
         result_image_layout->addLayout(result_image_layout1);
         for (int tile_x_id = 0; tile_x_id < m_dim.tile_x_num; ++tile_x_id) {
             auto result_image_label = new QLabel();
-            result_image_label->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            result_image_label->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Ignored);
             result_image_label->setScaledContents(true);
             result_image_layout1->addWidget(result_image_label);
             m_result_image_labels[tile_y_id][tile_x_id] = result_image_label;
@@ -456,6 +456,7 @@ void Widget::ClearImages() {
 
 void Widget::ToggleMonitor(bool checked) {
     if (checked) {
+        m_image_window->resize(1200, 600);
         m_image_window->show();
     } else {
         m_image_window->hide();

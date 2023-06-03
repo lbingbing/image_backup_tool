@@ -77,7 +77,7 @@ class Widget(QtWidgets.QWidget):
         image_layout1 = QtWidgets.QHBoxLayout(image_group_box)
 
         self.image_label = QtWidgets.QLabel()
-        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+        self.image_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
         self.image_label.setScaledContents(True)
         image_layout1.addWidget(self.image_label)
 
@@ -92,7 +92,7 @@ class Widget(QtWidgets.QWidget):
             result_image_layout.addLayout(result_image_layout1)
             for tile_x_id in range(self.tile_x_num):
                 result_image_label = QtWidgets.QLabel()
-                result_image_label.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Preferred)
+                result_image_label.setSizePolicy(QtWidgets.QSizePolicy.Ignored, QtWidgets.QSizePolicy.Ignored)
                 result_image_label.setScaledContents(True)
                 result_image_layout1.addWidget(result_image_label)
                 self.result_image_labels[tile_y_id][tile_x_id] = result_image_label

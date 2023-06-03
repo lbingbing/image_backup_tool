@@ -8,11 +8,11 @@ import symbol_codec
 
 class Transform:
     def __init__(self):
-        self.bbox = (0, 0, 1, 1)
-        self.sphere = (0, 0, 0, 0)
+        self.bbox = [0, 0, 1, 1]
+        self.sphere = [0, 0, 0, 0]
         self.filter_level = 0
         self.binarization_threshold = 128
-        self.pixelization_threshold = (128, 182, 128)
+        self.pixelization_threshold = [128, 128, 128]
 
     def clone(self):
         transform = Transform()
@@ -24,11 +24,11 @@ class Transform:
 
     def load(self, path):
         with open(path, 'rb') as f:
-            self.bbox = struct.unpack('<ffff', f.read(16))
-            self.sphere = struct.unpack('<ffff', f.read(16))
+            self.bbox = list(struct.unpack('<ffff', f.read(16)))
+            self.sphere = list(struct.unpack('<ffff', f.read(16)))
             self.filter_level = struct.unpack('<i', f.read(4))[0]
             self.binarization_threshold = struct.unpack('<i', f.read(4))[0]
-            self.pixelization_threshold = struct.unpack('<iii', f.read(12))
+            self.pixelization_threshold = list(struct.unpack('<iii', f.read(12)))
 
     def save(self, path):
         with open(path, 'wb') as f:
