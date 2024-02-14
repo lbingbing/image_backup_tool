@@ -14,7 +14,7 @@ void Task::Init(SymbolType symbol_type, const Dim& dim, uint32_t part_num) {
     m_dim = dim;
     m_part_num = part_num;
     m_done_part_num = 0;
-    m_task_status_bytes.resize(static_cast<size_t>((m_part_num + 7) / 8), 0);
+    m_task_status_bytes.resize((static_cast<size_t>(m_part_num) + 7) / 8, 0);
 }
 
 void Task::Load() {
@@ -25,7 +25,7 @@ void Task::Load() {
     f.read(reinterpret_cast<char*>(&m_dim), sizeof(m_dim));
     f.read(reinterpret_cast<char*>(&m_part_num), sizeof(m_part_num));
     f.read(reinterpret_cast<char*>(&m_done_part_num), sizeof(m_done_part_num));
-    m_task_status_bytes.resize(static_cast<size_t>((m_part_num + 7) / 8), 0);
+    m_task_status_bytes.resize((static_cast<size_t>(m_part_num) + 7) / 8, 0);
     f.read(reinterpret_cast<char*>(m_task_status_bytes.data()), m_task_status_bytes.size());
 }
 
@@ -38,9 +38,8 @@ void Task::SetFinalizationCb(FinalizationStartCb finalization_start_cb, Finaliza
 bool Task::AllocateBlob() {
     if (std::filesystem::is_regular_file(m_blob_path)) return true;
     std::ofstream(m_blob_path, std::ios_base::binary);
-    uint64_t part_byte_num = get_part_byte_num(m_symbol_type, m_dim);
     std::error_code ec;
-    std::filesystem::resize_file(m_blob_path, part_byte_num * m_part_num, ec);
+    std::filesystem::resize_file(m_blob_path, static_cast<uint64_t>(get_part_byte_num(m_symbol_type, m_dim)) * m_part_num, ec);
     return !ec;
 }
 
@@ -105,8 +104,7 @@ bool Task::IsDone() const {
 void Task::Finalize() {
     Flush();
     std::ifstream blob_file(m_blob_path, std::ios_base::binary);
-    uint64_t part_byte_num = get_part_byte_num(m_symbol_type, m_dim);
-    blob_file.seekg(part_byte_num * (m_part_num - 1));
+    blob_file.seekg(static_cast<uint64_t>(get_part_byte_num(m_symbol_type, m_dim)) * (m_part_num - 1));
     uint64_t file_size = 0;
     blob_file.read(reinterpret_cast<char*>(&file_size), sizeof(file_size));
     blob_file.close();

@@ -385,9 +385,8 @@ void TaskPage::ToggleTaskStartStop() {
         m_part_byte_num = get_part_byte_num(m_context.symbol_type, {m_context.tile_x_num, m_context.tile_y_num, m_context.tile_x_size, m_context.tile_y_size});
         if (ValidateConfig()) {
             m_context.state = State::DISPLAY;
-            auto res = get_task_bytes(m_target_file_path, m_part_byte_num);
-            m_raw_bytes = std::move(std::get<0>(res));
-            auto part_num = std::get<1>(res);
+            auto [raw_bytes, part_num] = get_task_bytes(m_target_file_path, m_part_byte_num);
+            m_raw_bytes = std::move(raw_bytes);
             if (!m_undone_part_ids.empty()) {
                 assert(part_num == m_part_num);
                 m_cur_undone_part_id_index = 0;
@@ -493,7 +492,7 @@ void TaskPage::NavigatePart(uint32_t part_id) {
 }
 
 void TaskPage::Draw(uint32_t part_id) {
-    Bytes part_bytes(m_raw_bytes.begin()+part_id*m_part_byte_num, m_raw_bytes.begin()+(part_id+1)*m_part_byte_num);
+    Bytes part_bytes(m_raw_bytes.begin()+part_id*static_cast<size_t>(m_part_byte_num), m_raw_bytes.begin()+(part_id+1)*static_cast<size_t>(m_part_byte_num));
     auto symbols = m_symbol_codec->Encode(part_id, part_bytes, m_context.tile_x_num * m_context.tile_y_num * m_context.tile_x_size * m_context.tile_y_size);
     emit PartNavigated(symbols);
 }

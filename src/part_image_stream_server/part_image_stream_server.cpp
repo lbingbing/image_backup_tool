@@ -57,11 +57,7 @@ int main(int argc, char** argv) {
 
         auto symbol_type = parse_symbol_type(symbol_type_str);
         auto dim = parse_dim(dim_str);
-        auto res = prepare_part_images(target_file, symbol_type, dim);
-        auto symbol_codec = std::move(std::get<0>(res));
-        auto part_byte_num = std::get<1>(res);
-        auto raw_bytes = std::move(std::get<2>(res));
-        auto part_num = std::get<3>(res);
+        auto [symbol_codec, part_byte_num, raw_bytes, part_num] = prepare_part_images(target_file, symbol_type, dim);
         auto gen_image_fn1 = generate_part_images(dim, pixel_size, space_size, symbol_codec.get(), part_byte_num, raw_bytes, part_num);
         auto gen_image_fn2 = gen_images(gen_image_fn1, part_num);
         start_image_stream_server(gen_image_fn2, port);
