@@ -43,6 +43,7 @@ struct Context {
     int space_size = 0;
     int calibration_pixel_size = 0;
     std::string task_status_server;
+    int interval = 0;
 };
 
 enum class CalibrationMode {
@@ -64,7 +65,6 @@ public:
     QSpinBox* m_tile_y_size_spin_box = nullptr;
     QSpinBox* m_pixel_size_spin_box = nullptr;
     QSpinBox* m_space_size_spin_box = nullptr;
-    QSpinBox* m_calibration_pixel_size_spin_box = nullptr;
 
 signals:
     void CalibrationStarted(CalibrationMode calibration_mode, std::vector<uint8_t> data);
@@ -113,7 +113,6 @@ private slots:
     void ToggleTaskMode(int state);
     void OpenTaskFile();
     void ToggleTaskStartStop();
-    void SetInterval(int interval);
     void NavigatePart(uint32_t part_id);
 
 private:
@@ -136,11 +135,10 @@ private:
     size_t m_cur_undone_part_id_index = 0;
     uint32_t m_cur_part_id = 0;
     DisplayMode m_display_mode = DisplayMode::MANUAL;
-    int m_interval = 50;
 
     std::unique_ptr<SymbolCodec> m_symbol_codec;
 
-    int m_auto_navigate_update_fps_interval = int(2000.f / m_interval);
+    int m_auto_navigate_update_fps_interval = 0;
     int m_auto_navigate_frame_num = 0;
     std::chrono::time_point<std::chrono::high_resolution_clock> m_auto_navigate_time;
     float m_auto_navigate_fps = 0;
@@ -207,14 +205,6 @@ private slots:
 
 private:
     void LoadConfig();
-    void SetSymbolType(int index) { m_context.symbol_type = static_cast<SymbolType>(index); }
-    void SetTileXNum(int tile_x_num) { m_context.tile_x_num = tile_x_num; }
-    void SetTileYNum(int tile_y_num) { m_context.tile_y_num = tile_y_num; }
-    void SetTileXSize(int tile_x_size) { m_context.tile_x_size = tile_x_size; }
-    void SetTileYSize(int tile_y_size) { m_context.tile_y_size = tile_y_size; }
-    void SetPixelSize(int pixel_size) { m_context.pixel_size = pixel_size; }
-    void SetSpaceSize(int space_size) { m_context.space_size = space_size; }
-    void SetCalibrationPixelSize(int calibration_pixel_size) { m_context.calibration_pixel_size = calibration_pixel_size; }
 
     Parameters m_parameters;
     Context m_context;

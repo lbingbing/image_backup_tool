@@ -43,6 +43,7 @@ class Context:
         self.space_size = None
         self.calibration_pixel_size = None
         self.task_status_server = None
+        self.interval = None
 
 @enum.unique
 class CalibrationMode(enum.Enum):
@@ -140,12 +141,16 @@ class CalibrationPage(QtWidgets.QWidget):
         self.space_size_spin_box.setValue(self.context.space_size)
         config_frame_layout.addWidget(self.space_size_spin_box)
 
+        def set_calibration_pixel_size_fn(calibration_pixel_size):
+            self.context.calibration_pixel_size = calibration_pixel_size
+
         calibration_pixel_size_label = QtWidgets.QLabel('calibration_pixel_size')
         calibration_pixel_size_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         config_frame_layout.addWidget(calibration_pixel_size_label)
         self.calibration_pixel_size_spin_box = QtWidgets.QSpinBox()
         self.calibration_pixel_size_spin_box.setRange(*self.parameters.calibration_pixel_size_range)
         self.calibration_pixel_size_spin_box.setValue(self.context.calibration_pixel_size)
+        self.calibration_pixel_size_spin_box.valueChanged.connect(set_calibration_pixel_size_fn)
         config_frame_layout.addWidget(self.calibration_pixel_size_spin_box)
 
     def toggle_calibration_start_stop(self):
@@ -191,11 +196,10 @@ class TaskPage(QtWidgets.QWidget):
         self.cur_undone_part_id_index = None
         self.cur_part_id = None
         self.display_mode = DisplayMode.MANUAL
-        self.interval = 50
 
         self.symbol_codec = None
 
-        self.auto_navigate_update_fps_interval = int(2000 / self.interval)
+        self.auto_navigate_update_fps_interval = int(2000 / self.context.interval)
         self.auto_navigate_frame_num = None
         self.auto_navigate_time = None
         self.auto_navigate_fps = None
@@ -365,13 +369,16 @@ class TaskPage(QtWidgets.QWidget):
         self.display_mode_button.clicked.connect(self.toggle_display_mode)
         display_config_frame_layout.addWidget(self.display_mode_button)
 
+        def set_interval(interval):
+            self.context.interval = interval
+
         interval_label = QtWidgets.QLabel('interval')
         interval_label.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
         display_config_frame_layout.addWidget(interval_label)
         self.interval_spin_box = QtWidgets.QSpinBox()
         self.interval_spin_box.setRange(*self.parameters.interval_range)
-        self.interval_spin_box.setValue(self.interval)
-        self.interval_spin_box.valueChanged.connect(self.set_interval)
+        self.interval_spin_box.setValue(self.context.interval)
+        self.interval_spin_box.valueChanged.connect(set_interval)
         display_config_frame_layout.addWidget(self.interval_spin_box)
 
         auto_navigate_fps_label = QtWidgets.QLabel('auto_navigate_fps')
@@ -500,7 +507,7 @@ class TaskPage(QtWidgets.QWidget):
             self.display_mode_button.setChecked(True)
             self.interval_spin_box.setEnabled(False)
             self.timer.timeout.connect(self.navigate_next_part)
-            self.timer.start(self.interval)
+            self.timer.start(self.context.interval)
             self.auto_navigate_frame_num = 0
             self.auto_navigate_time = time.time()
             self.auto_navigate_fps = 0
@@ -514,9 +521,6 @@ class TaskPage(QtWidgets.QWidget):
             self.auto_navigate_time = None
             self.auto_navigate_fps = None
             self.auto_navigate_fps_value_label.setText('-')
-
-    def set_interval(self, interval):
-        self.interval = interval
 
     def navigate_part(self, part_id):
         self.cur_part_id = part_id
@@ -593,7 +597,7 @@ class TaskPage(QtWidgets.QWidget):
                 self.timer.stop()
             success = self.fetch_task_status()
             if self.display_mode == DisplayMode.AUTO:
-                self.timer.start(self.interval)
+                self.timer.start(self.context.interval)
             self.display_config_frame.setEnabled(True)
             return success
         else:
@@ -694,35 +698,49 @@ class Widget(QtWidgets.QWidget):
         self.calibration_page = CalibrationPage(self.parameters, self.context)
         self.task_page = TaskPage(self.parameters, self.context)
 
+        def set_symbol_type_fn(index):
+            self.context.symbol_type = symbol_codec.SymbolType(index)
+        def set_tile_x_num_fn(tile_x_num):
+            self.context.tile_x_num = tile_x_num
+        def set_tile_y_num_fn(tile_y_num):
+            self.context.tile_y_num = tile_y_num
+        def set_tile_x_size_fn(tile_x_size):
+            self.context.tile_x_size = tile_x_size
+        def set_tile_y_size_fn(tile_y_size):
+            self.context.tile_y_size = tile_y_size
+        def set_pixel_size_fn(pixel_size):
+            self.context.pixel_size = pixel_size
+        def set_space_size_fn(space_size):
+            self.context.space_size = space_size
+
         self.calibration_page.symbol_type_combo_box.currentIndexChanged.connect(self.task_page.symbol_type_combo_box.setCurrentIndex)
-        self.calibration_page.symbol_type_combo_box.currentIndexChanged.connect(self.set_symbol_type)
+        self.calibration_page.symbol_type_combo_box.currentIndexChanged.connect(set_symbol_type_fn)
         self.calibration_page.tile_x_num_spin_box.valueChanged.connect(self.task_page.tile_x_num_spin_box.setValue)
-        self.calibration_page.tile_x_num_spin_box.valueChanged.connect(self.set_tile_x_num)
+        self.calibration_page.tile_x_num_spin_box.valueChanged.connect(set_tile_x_num_fn)
         self.calibration_page.tile_y_num_spin_box.valueChanged.connect(self.task_page.tile_y_num_spin_box.setValue)
-        self.calibration_page.tile_y_num_spin_box.valueChanged.connect(self.set_tile_y_num)
+        self.calibration_page.tile_y_num_spin_box.valueChanged.connect(set_tile_y_num_fn)
         self.calibration_page.tile_x_size_spin_box.valueChanged.connect(self.task_page.tile_x_size_spin_box.setValue)
-        self.calibration_page.tile_x_size_spin_box.valueChanged.connect(self.set_tile_x_size)
+        self.calibration_page.tile_x_size_spin_box.valueChanged.connect(set_tile_x_size_fn)
         self.calibration_page.tile_y_size_spin_box.valueChanged.connect(self.task_page.tile_y_size_spin_box.setValue)
-        self.calibration_page.tile_y_size_spin_box.valueChanged.connect(self.set_tile_y_size)
+        self.calibration_page.tile_y_size_spin_box.valueChanged.connect(set_tile_y_size_fn)
         self.calibration_page.pixel_size_spin_box.valueChanged.connect(self.task_page.pixel_size_spin_box.setValue)
-        self.calibration_page.pixel_size_spin_box.valueChanged.connect(self.set_pixel_size)
+        self.calibration_page.pixel_size_spin_box.valueChanged.connect(set_pixel_size_fn)
         self.calibration_page.space_size_spin_box.valueChanged.connect(self.task_page.space_size_spin_box.setValue)
-        self.calibration_page.space_size_spin_box.valueChanged.connect(self.set_space_size)
-        self.calibration_page.calibration_pixel_size_spin_box.valueChanged.connect(self.set_calibration_pixel_size)
+        self.calibration_page.space_size_spin_box.valueChanged.connect(set_space_size_fn)
         self.task_page.symbol_type_combo_box.currentIndexChanged.connect(self.calibration_page.symbol_type_combo_box.setCurrentIndex)
-        self.task_page.symbol_type_combo_box.currentIndexChanged.connect(self.set_symbol_type)
+        self.task_page.symbol_type_combo_box.currentIndexChanged.connect(set_symbol_type_fn)
         self.task_page.tile_x_num_spin_box.valueChanged.connect(self.calibration_page.tile_x_num_spin_box.setValue)
-        self.task_page.tile_x_num_spin_box.valueChanged.connect(self.set_tile_x_num)
+        self.task_page.tile_x_num_spin_box.valueChanged.connect(set_tile_x_num_fn)
         self.task_page.tile_y_num_spin_box.valueChanged.connect(self.calibration_page.tile_y_num_spin_box.setValue)
-        self.task_page.tile_y_num_spin_box.valueChanged.connect(self.set_tile_y_num)
+        self.task_page.tile_y_num_spin_box.valueChanged.connect(set_tile_y_num_fn)
         self.task_page.tile_x_size_spin_box.valueChanged.connect(self.calibration_page.tile_x_size_spin_box.setValue)
-        self.task_page.tile_x_size_spin_box.valueChanged.connect(self.set_tile_x_size)
+        self.task_page.tile_x_size_spin_box.valueChanged.connect(set_tile_x_size_fn)
         self.task_page.tile_y_size_spin_box.valueChanged.connect(self.calibration_page.tile_y_size_spin_box.setValue)
-        self.task_page.tile_y_size_spin_box.valueChanged.connect(self.set_tile_y_size)
+        self.task_page.tile_y_size_spin_box.valueChanged.connect(set_tile_y_size_fn)
         self.task_page.pixel_size_spin_box.valueChanged.connect(self.calibration_page.pixel_size_spin_box.setValue)
-        self.task_page.pixel_size_spin_box.valueChanged.connect(self.set_pixel_size)
+        self.task_page.pixel_size_spin_box.valueChanged.connect(set_pixel_size_fn)
         self.task_page.space_size_spin_box.valueChanged.connect(self.calibration_page.space_size_spin_box.setValue)
-        self.task_page.space_size_spin_box.valueChanged.connect(self.set_space_size)
+        self.task_page.space_size_spin_box.valueChanged.connect(set_space_size_fn)
 
         self.control_tab = QtWidgets.QTabWidget()
         self.control_tab.setSizePolicy(QtWidgets.QSizePolicy.Preferred, QtWidgets.QSizePolicy.Fixed)
@@ -755,30 +773,7 @@ class Widget(QtWidgets.QWidget):
         self.context.space_size = config.getint('DEFAULT', 'space_size')
         self.context.calibration_pixel_size = config.getint('DEFAULT', 'calibration_pixel_size')
         self.context.task_status_server = config.get('DEFAULT', 'task_status_server')
-
-    def set_symbol_type(self, index):
-        self.context.symbol_type = symbol_codec.SymbolType(index)
-
-    def set_tile_x_num(self, tile_x_num):
-        self.context.tile_x_num = tile_x_num
-
-    def set_tile_y_num(self, tile_y_num):
-        self.context.tile_y_num = tile_y_num
-
-    def set_tile_x_size(self, tile_x_size):
-        self.context.tile_x_size = tile_x_size
-
-    def set_tile_y_size(self, tile_y_size):
-        self.context.tile_y_size = tile_y_size
-
-    def set_pixel_size(self, pixel_size):
-        self.context.pixel_size = pixel_size
-
-    def set_space_size(self, space_size):
-        self.context.space_size = space_size
-
-    def set_calibration_pixel_size(self, calibration_pixel_size):
-        self.context.calibration_pixel_size = calibration_pixel_size
+        self.context.interval = config.getint('DEFAULT', 'interval')
 
     def start_calibration(self, calibration_mode, data):
         self.control_tab.setTabEnabled(1, False)

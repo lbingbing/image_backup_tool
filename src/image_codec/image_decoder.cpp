@@ -219,7 +219,7 @@ std::tuple<int, int, int, int> get_non_white_region_bbox(const cv::Mat& img, int
 }
 
 Symbol get_symbol(const cv::Mat& img, float cx, float cy) {
-    float radius = 1.5;
+    float radius = 1;
     int x0 = std::max(static_cast<int>(std::round(cx - radius)), 0);
     int y0 = std::max(static_cast<int>(std::round(cy - radius)), 0);
     int x1 = std::min(static_cast<int>(std::round(cx + radius + 1)), img.cols);

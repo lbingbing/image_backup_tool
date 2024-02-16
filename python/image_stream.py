@@ -16,13 +16,17 @@ class ImageStream:
         raise NotImplementedError()
 
 class CameraImageStream(ImageStream):
-    def __init__(self, url, scale):
+    def __init__(self, url, scale, width, height):
         if not url.startswith('http'):
             url = int(url)
         self.cap = cv.VideoCapture(url)
         if self.cap.isOpened():
-            self.cap.set(cv.CAP_PROP_FRAME_WIDTH, self.cap.get(cv.CAP_PROP_FRAME_WIDTH) * scale)
-            self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) * scale)
+            if scale:
+                self.cap.set(cv.CAP_PROP_FRAME_WIDTH, self.cap.get(cv.CAP_PROP_FRAME_WIDTH) * scale)
+                self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, self.cap.get(cv.CAP_PROP_FRAME_HEIGHT) * scale)
+            else:
+                self.cap.set(cv.CAP_PROP_FRAME_WIDTH, width)
+                self.cap.set(cv.CAP_PROP_FRAME_HEIGHT, height)
 
     def close(self):
         if self.cap.isOpened():
@@ -135,12 +139,14 @@ def create_image_stream():
     config.read('image_stream.ini')
     stream_type = config.get('DEFAULT', 'stream_type', fallback='camera')
     camera_url = config.get('DEFAULT', 'camera_url', fallback=0)
-    scale = config.getint('DEFAULT', 'scale', fallback=1)
+    scale = config.getfloat('DEFAULT', 'scale', fallback=1)
+    width = config.getint('DEFAULT', 'width', fallback=800)
+    height = config.getint('DEFAULT', 'height', fallback=600)
     buffer_size = config.getint('DEFAULT', 'buffer_size', fallback=64)
     server = config.get('DEFAULT', 'server', fallback='127.0.0.1:80')
     ip, port = server_utils.parse_server_addr(server)
     if stream_type == 'camera':
-        image_stream = CameraImageStream(camera_url, scale)
+        image_stream = CameraImageStream(camera_url, scale, width, height)
     elif stream_type == 'pipe':
         image_stream = PipeImageStream(buffer_size)
     elif stream_type == 'socket':

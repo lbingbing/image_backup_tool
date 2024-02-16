@@ -177,7 +177,7 @@ def get_non_white_region_bbox(img, x, y):
     return x0, y0, x1 + 1, y1 + 1
 
 def get_symbol(img, cx, cy):
-    RADIUS = 1.5
+    RADIUS = 1
     x0 = max(round(cx - RADIUS), 0)
     y0 = max(round(cy - RADIUS), 0)
     x1 = min(round(cx + RADIUS + 1), img.shape[1])

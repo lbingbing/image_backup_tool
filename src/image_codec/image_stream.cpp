@@ -7,15 +7,20 @@
 #include "base64.h"
 #include "server_utils.h"
 
-CameraImageStream::CameraImageStream(const std::string& url, int scale) {
+CameraImageStream::CameraImageStream(const std::string& url, float scale, int width, int height) {
     if (url.find("http") == 0) {
         m_cap.open(url);
     } else {
         m_cap.open(std::stoi(url));
     }
     if (m_cap.isOpened()) {
-        m_cap.set(cv::CAP_PROP_FRAME_WIDTH, m_cap.get(cv::CAP_PROP_FRAME_WIDTH) * scale);
-        m_cap.set(cv::CAP_PROP_FRAME_HEIGHT, m_cap.get(cv::CAP_PROP_FRAME_HEIGHT) * scale);
+        if (scale) {
+            m_cap.set(cv::CAP_PROP_FRAME_WIDTH, m_cap.get(cv::CAP_PROP_FRAME_WIDTH) * scale);
+            m_cap.set(cv::CAP_PROP_FRAME_HEIGHT, m_cap.get(cv::CAP_PROP_FRAME_HEIGHT) * scale);
+        } else {
+            m_cap.set(cv::CAP_PROP_FRAME_WIDTH, width);
+            m_cap.set(cv::CAP_PROP_FRAME_HEIGHT, height);
+        }
     }
 }
 
@@ -134,7 +139,9 @@ Bytes SocketImageStream::FetchData() {
 std::unique_ptr<ImageStream> create_image_stream() {
     std::string stream_type("camera");
     std::string camera_url("0");
-    int scale = 1;
+    float scale = 1;
+    int width = 800;
+    int height = 600;
     size_t buffer_size = 64;
     std::string server("127.0.0.1:80");
     std::ifstream cfg_file("image_stream.ini");
@@ -142,7 +149,9 @@ std::unique_ptr<ImageStream> create_image_stream() {
     auto desc_handler = desc.add_options();
     desc_handler("DEFAULT.stream_type", boost::program_options::value<std::string>(&stream_type));
     desc_handler("DEFAULT.camera_url", boost::program_options::value<std::string>(&camera_url));
-    desc_handler("DEFAULT.scale", boost::program_options::value<int>(&scale));
+    desc_handler("DEFAULT.scale", boost::program_options::value<float>(&scale));
+    desc_handler("DEFAULT.width", boost::program_options::value<int>(&width));
+    desc_handler("DEFAULT.height", boost::program_options::value<int>(&height));
     desc_handler("DEFAULT.buffer_size", boost::program_options::value<size_t>(&buffer_size));
     desc_handler("DEFAULT.server", boost::program_options::value<std::string>(&server));
     boost::program_options::variables_map vm;
@@ -151,7 +160,7 @@ std::unique_ptr<ImageStream> create_image_stream() {
     auto [ip, port] = parse_server_addr(server);
     std::unique_ptr<ImageStream> image_stream;
     if (stream_type == "camera") {
-        image_stream = std::make_unique<CameraImageStream>(camera_url, scale);
+        image_stream = std::make_unique<CameraImageStream>(camera_url, scale, width, height);
     } else if (stream_type == "pipe") {
         image_stream = std::make_unique<PipeImageStream>(buffer_size);
     } else if (stream_type == "socket") {

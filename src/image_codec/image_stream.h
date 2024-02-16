@@ -14,7 +14,7 @@ public:
 
 class CameraImageStream : public ImageStream {
 public:
-    IMAGE_CODEC_API CameraImageStream(const std::string& url, int scale = 1);
+    IMAGE_CODEC_API CameraImageStream(const std::string& url, float scale, int width, int height);
     IMAGE_CODEC_API ~CameraImageStream();
     IMAGE_CODEC_API cv::Mat GetFrame() override;
 

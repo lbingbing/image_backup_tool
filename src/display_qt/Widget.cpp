@@ -102,10 +102,11 @@ CalibrationPage::CalibrationPage(QWidget* parent, const Parameters& parameters, 
     auto calibration_pixel_size_label = new QLabel("calibration_pixel_size");
     calibration_pixel_size_label->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
     config_frame_layout->addWidget(calibration_pixel_size_label);
-    m_calibration_pixel_size_spin_box = new QSpinBox();
-    m_calibration_pixel_size_spin_box->setRange(m_parameters.calibration_pixel_size_range[0], m_parameters.calibration_pixel_size_range[1]);
-    m_calibration_pixel_size_spin_box->setValue(m_context.calibration_pixel_size);
-    config_frame_layout->addWidget(m_calibration_pixel_size_spin_box);
+    auto calibration_pixel_size_spin_box = new QSpinBox();
+    calibration_pixel_size_spin_box->setRange(m_parameters.calibration_pixel_size_range[0], m_parameters.calibration_pixel_size_range[1]);
+    calibration_pixel_size_spin_box->setValue(m_context.calibration_pixel_size);
+    connect(calibration_pixel_size_spin_box, &QSpinBox::valueChanged, this, [this](int calibration_pixel_size){ m_context.calibration_pixel_size = calibration_pixel_size; });
+    config_frame_layout->addWidget(calibration_pixel_size_spin_box);
 }
 
 void CalibrationPage::ToggleCalibrationStartStop() {
@@ -138,6 +139,8 @@ void CalibrationPage::ToggleCalibrationStartStop() {
 }
 
 TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& context) : QWidget(parent), m_parameters(parameters), m_context(context), m_timer(this) {
+    m_auto_navigate_update_fps_interval = static_cast<int>(2000.f / m_context.interval);
+
     auto layout = new QHBoxLayout(this);
 
     m_task_button = new QPushButton("start");
@@ -307,8 +310,8 @@ TaskPage::TaskPage(QWidget* parent, const Parameters& parameters, Context& conte
     display_config_frame_layout->addWidget(interval_label);
     m_interval_spin_box = new QSpinBox();
     m_interval_spin_box->setRange(m_parameters.interval_range[0], m_parameters.interval_range[1]);
-    m_interval_spin_box->setValue(m_interval);
-    connect(m_interval_spin_box, &QSpinBox::valueChanged, this, &TaskPage::SetInterval);
+    m_interval_spin_box->setValue(m_context.interval);
+    connect(m_interval_spin_box, &QSpinBox::valueChanged, this, [this](int interval){ m_context.interval = interval; });
     display_config_frame_layout->addWidget(m_interval_spin_box);
 
     auto auto_navigate_fps_label = new QLabel("auto_navigate_fps");
@@ -466,7 +469,7 @@ void TaskPage::ToggleDisplayMode() {
         m_display_mode_button->setChecked(true);
         m_interval_spin_box->setEnabled(false);
         connect(&m_timer, &QTimer::timeout, this, &TaskPage::NavigateNextPart);
-        m_timer.start(m_interval);
+        m_timer.start(m_context.interval);
         m_auto_navigate_frame_num = 0;
         m_auto_navigate_time = std::chrono::high_resolution_clock::now();
         m_auto_navigate_fps = 0;
@@ -480,10 +483,6 @@ void TaskPage::ToggleDisplayMode() {
         m_auto_navigate_fps = 0;
         m_auto_navigate_fps_value_label->setText("-");
     }
-}
-
-void TaskPage::SetInterval(int interval) {
-    m_interval = interval;
 }
 
 void TaskPage::NavigatePart(uint32_t part_id) {
@@ -588,7 +587,7 @@ bool TaskPage::UpdateTaskStatus() {
         }
         auto success = FetchTaskStatus();
         if (m_display_mode == DisplayMode::AUTO) {
-            m_timer.start(m_interval);
+            m_timer.start(m_context.interval);
         }
         m_display_config_frame->setEnabled(true);
         return success;
@@ -693,35 +692,42 @@ Widget::Widget(QWidget* parent) : QWidget(parent) {
     m_calibration_page = new CalibrationPage(nullptr, m_parameters, m_context);
     m_task_page = new TaskPage(nullptr, m_parameters, m_context);
 
+    auto set_symbol_type_fn = [this](int index){ m_context.symbol_type = static_cast<SymbolType>(index); };
+    auto set_tile_x_num_fn = [this](int tile_x_num){ m_context.tile_x_num = tile_x_num; };
+    auto set_tile_y_num_fn = [this](int tile_y_num){ m_context.tile_y_num = tile_y_num; };
+    auto set_tile_x_size_fn = [this](int tile_x_size){ m_context.tile_x_size = tile_x_size; };
+    auto set_tile_y_size_fn = [this](int tile_y_size){ m_context.tile_y_size = tile_y_size; };
+    auto set_pixel_size_fn = [this](int pixel_size){ m_context.pixel_size = pixel_size; };
+    auto set_space_size_fn = [this](int space_size){ m_context.space_size = space_size; };
+
     connect(m_calibration_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, m_task_page->m_symbol_type_combo_box, &QComboBox::setCurrentIndex);
-    connect(m_calibration_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, this, &Widget::SetSymbolType);
+    connect(m_calibration_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, this, set_symbol_type_fn);
     connect(m_calibration_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, m_task_page->m_tile_x_num_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileXNum);
+    connect(m_calibration_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, this, set_tile_x_num_fn);
     connect(m_calibration_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, m_task_page->m_tile_y_num_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileYNum);
+    connect(m_calibration_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, this, set_tile_y_num_fn);
     connect(m_calibration_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, m_task_page->m_tile_x_size_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileXSize);
+    connect(m_calibration_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, this, set_tile_x_size_fn);
     connect(m_calibration_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, m_task_page->m_tile_y_size_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileYSize);
+    connect(m_calibration_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, this, set_tile_y_size_fn);
     connect(m_calibration_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, m_task_page->m_pixel_size_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetPixelSize);
+    connect(m_calibration_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, this, set_pixel_size_fn);
     connect(m_calibration_page->m_space_size_spin_box, &QSpinBox::valueChanged, m_task_page->m_space_size_spin_box, &QSpinBox::setValue);
-    connect(m_calibration_page->m_space_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetSpaceSize);
-    connect(m_calibration_page->m_calibration_pixel_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetCalibrationPixelSize);
+    connect(m_calibration_page->m_space_size_spin_box, &QSpinBox::valueChanged, this, set_space_size_fn);
     connect(m_task_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, m_calibration_page->m_symbol_type_combo_box, &QComboBox::setCurrentIndex);
-    connect(m_task_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, this, &Widget::SetSymbolType);
+    connect(m_task_page->m_symbol_type_combo_box, &QComboBox::currentIndexChanged, this, set_symbol_type_fn);
     connect(m_task_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_tile_x_num_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileXNum);
+    connect(m_task_page->m_tile_x_num_spin_box, &QSpinBox::valueChanged, this, set_tile_x_num_fn);
     connect(m_task_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_tile_y_num_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileYNum);
+    connect(m_task_page->m_tile_y_num_spin_box, &QSpinBox::valueChanged, this, set_tile_y_num_fn);
     connect(m_task_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_tile_x_size_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileXSize);
+    connect(m_task_page->m_tile_x_size_spin_box, &QSpinBox::valueChanged, this, set_tile_x_size_fn);
     connect(m_task_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_tile_y_size_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetTileYSize);
+    connect(m_task_page->m_tile_y_size_spin_box, &QSpinBox::valueChanged, this, set_tile_y_size_fn);
     connect(m_task_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_pixel_size_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetPixelSize);
+    connect(m_task_page->m_pixel_size_spin_box, &QSpinBox::valueChanged, this, set_pixel_size_fn);
     connect(m_task_page->m_space_size_spin_box, &QSpinBox::valueChanged, m_calibration_page->m_space_size_spin_box, &QSpinBox::setValue);
-    connect(m_task_page->m_space_size_spin_box, &QSpinBox::valueChanged, this, &Widget::SetSpaceSize);
+    connect(m_task_page->m_space_size_spin_box, &QSpinBox::valueChanged, this, set_space_size_fn);
 
     m_control_tab = new QTabWidget();
     m_control_tab->setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed);
@@ -757,6 +763,7 @@ void Widget::LoadConfig() {
     desc_handler("DEFAULT.space_size", boost::program_options::value<int>(&m_context.space_size));
     desc_handler("DEFAULT.calibration_pixel_size", boost::program_options::value<int>(&m_context.calibration_pixel_size));
     desc_handler("DEFAULT.task_status_server", boost::program_options::value<std::string>(&m_context.task_status_server));
+    desc_handler("DEFAULT.interval", boost::program_options::value<int>(&m_context.interval));
     boost::program_options::variables_map vm;
     store(parse_config_file(cfg_file, desc, false), vm);
     notify(vm);
@@ -769,6 +776,7 @@ void Widget::LoadConfig() {
     if (!vm.count("DEFAULT.space_size")) throw std::invalid_argument("DEFAULT.space_size not found");
     if (!vm.count("DEFAULT.calibration_pixel_size")) throw std::invalid_argument("DEFAULT.calibration_pixel_size not found");
     if (!vm.count("DEFAULT.task_status_server")) throw std::invalid_argument("DEFAULT.task_status_server not found");
+    if (!vm.count("DEFAULT.interval")) throw std::invalid_argument("DEFAULT.interval not found");
     m_context.symbol_type = parse_symbol_type(symbol_type_str);
 }
 
